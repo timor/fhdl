@@ -92,31 +92,48 @@ SYMBOL: if-stack
 : id-label ( d -- str )
     15 0 bit-range "...%04x" sprintf ;
 
-: node-id ( node -- id )
-    identity-hashcode ;
+GENERIC: node-id ( node -- id )
+M: object node-id ;
+M: tuple node-id identity-hashcode ;
 
 GENERIC: node-label ( node -- str )
 
+M: object node-label
+    present ;
+
 M: node node-label
     class-of ;
-
-! stack index
-M: fixnum node-label
-    present ;
 
 M: #call node-label
     word>> ;
 
 M: #push node-label
-    literal>> "%u" sprintf "'" dup surround ;
+    literal>> present "'" dup surround ;
 
 PRIVATE>
+
+! In the internal graph repesentation, source nodes don't have an entry. This
+! creates an empty entry for each source node.
+: ensure-source-nodes ( graph -- graph' )
+    dup values [                ! graph value
+        members
+        [                       ! graph key
+            2dup swap key?
+            [ drop ]
+            [ HS{ } swap pick set-at ] if
+        ] each
+    ] each ;
+
 : digraph>graphviz ( assoc -- graph )
+    ensure-source-nodes
     <digraph> swap
-    [   members swap
-        [ node-id '[ node-id _ add-edge ] each ] keep
-        [ node-id <node> ] [ node-label ] bi
-        =label add
+    [ [
+            [ node-id ] [ members ] bi*
+            [ node-id swap add-edge ] with each ]
+        [
+            drop [ node-id <node> ] [ node-label ] bi
+            =label add
+        ] 2bi
     ] assoc-each ;
 
 

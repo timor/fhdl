@@ -4,7 +4,7 @@ USING: compiler fhdl.tree math prettyprint tools.test ;
 IN: fhdl.tree.tests
 
 : test-tree ( -- tree )
-    [ + + ] frontend tree>digraph ;
+    [ + + ] frontend compute-def-use tree>digraph ;
 
 : fhdl-tree-test ( -- )
     [ + + ] tree. ;
