@@ -1,9 +1,10 @@
 ! Copyright (C) 2019 martinb.
 ! See http://factorcode.org/license.txt for BSD license.
-USING: accessors assocs classes compiler compiler.tree compiler.tree.combinators
-formatting fry graphviz graphviz.notation graphviz.render images.viewer
-io.files.temp kernel locals math math.bitwise mirrors namespaces present
-sequences sequences.deep sets ui ui.gadgets.scrollers ;
+USING: accessors arrays assocs classes compiler compiler.tree
+compiler.tree.combinators compiler.tree.def-use formatting fry graphs graphviz
+graphviz.notation graphviz.render images.viewer io.files.temp kernel locals math
+math.bitwise mirrors namespaces present sequences sequences.deep sets ui
+ui.gadgets.scrollers ;
 IN: fhdl.tree
 
 FROM: compiler.tree => node node? ;
@@ -15,42 +16,40 @@ FROM: namespaces => set ;
 ! words, and utilities meant for extracting info for hardware synthesis.
 
 ! The data structure used id factor's digraph representation, wich is an assoc
-! that pairs a vertex with a hash set of incoming edges.
-
-! At the moment, edges are just source vertices.
+! that pairs a vertex with a hash set of incoming edges, that is, the set of
+! source vertices.
 
 <PRIVATE
 
 ! Add edge to existing vertex
+! TODO this is probably redundant, add-vertex already seems to exhibit the same
+! behavior.
 : add-edge-to-vertex ( graph vertex edge -- graph' )
     swap pick adjoin-at ;
 
-:: add-edges ( graph vertex edges -- graph' )
-    graph edges [ vertex swap add-edge-to-vertex ] each ;
+GENERIC: add-node-to-graph ( graph node -- graph' )
+! assume computed def-use!
 
-! Helper, build the associations from values to the node, where the key can be
-! used for iteration.
-: node-ports ( node port-list -- assoc )
-    over <mirror> extract-keys
-    values sift harvest concat flatten
-    swap '[ _ ] map>alist ;
+M: node add-node-to-graph
+    dup node-defs-values [ used-by ] map
+    [
+        pick add-vertex
+    ] with each ;
 
+! M: #introduce add-node-to-graph
+!     node-defs-values [
+!         swap used-by pick add-vertex
+!     ] each-index
+!     ;
+! M: #return add-node-to-graph
+!     [ node-uses-values [ [ defined-by ] keep 1array pick add-vertex ] each ]
+!     [ [ 1array ] [ node-uses-values ] bi
+!       [ defined-by ] map [ swap pick remove-vertex ] with each ]
+!     [ over delete-at ] tri
+!     ;
 
-! This returns all the node inputs.
-! TODO: replace by node-uses-values from compiler.tree.def-use
-: node-inputs ( node -- assoc )
-    { "in-d" "phi-in-d" "in-r" } node-ports ;
-
-! TODO: replace by node-defs-values from compiler.tree.def-use
-: node-outputs ( node -- assoc )
-    { "out-d" "out-r" } node-ports ;
-
-: add-node-to-graph ( graph node -- graph' )
-    [ swap [ drop HS{ } clone ] cache drop ] 2keep
-    [ dup node-uses-values [ add-edge-to-vertex ] with each ]
-    [ dup node-defs-values [ swap add-edge-to-vertex ] with each ]
-    bi
-    ;
+! M: #shuffle add-node-to-graph
+!     mapping>> [ swap [ defined-by ] [ used-by ] bi* pick maybe-add-vertex ] assoc-each ;
 
 PRIVATE>
 
@@ -75,42 +74,96 @@ SYMBOL: if-stack
         [ connect-phi-stack ] 2each
     ] [ drop ] if ;
 
+! ** Remove non-input/output value nodes in the graph
+
+! Assumes computed def-use.
+
+<PRIVATE
+: intermediate-value? ( vertex -- ? )
+    dup integer? [
+        [ defined-by #introduce? ]
+        [ used-by [ #return? ] any? ] bi or not
+    ]
+    [ drop f ] if ;
+
+! Remove a vertex by reconnecting the input to all output vertices.
+: interpolate-vertex ( graph vertex -- graph' )
+    [ [ defined-by ] [ 1array ] bi pick remove-vertex ]
+    [ dup used-by pick remove-vertex ]
+    [ [ defined-by ] [ used-by ] bi pick add-vertex ]
+    tri ;
+
+PRIVATE>
+
+: interpolate-intermediate-values ( graph -- graph' )
+    dup keys [
+        dup intermediate-value? [
+            interpolate-vertex
+        ] [ drop ] if
+    ] each
+    [ nip null? ] assoc-reject
+    ;
+
 ! Construct a directed graph that can be used with e.g. add-vertex, closure.
 : tree>digraph ( tree -- assoc )
-    V{ } clone if-stack set
-    H{ } clone swap
     [
-        [ save-#if ]
-        [ add-node-to-graph ]
-        [ connect-#phi ] tri
-    ] each-node ;
+        compute-def-use
+        V{ } clone if-stack set
+        H{ } clone swap
+        [
+            [ save-#if ]
+            [ add-node-to-graph ]
+            [ connect-#phi ] tri
+        ] each-node
+        ! interpolate-intermediate-values
+    ] with-scope
+    ;
+
 
 ! * Graphviz visualization
 
-<PRIVATE
-! Can be used for short display of a long integer id.
-: id-label ( d -- str )
-    15 0 bit-range "...%04x" sprintf ;
+GENERIC: set-node-attributes* ( attrs node -- attrs )
+
+M: object set-node-attributes* drop ;
 
 GENERIC: node-id ( node -- id )
 M: object node-id ;
-M: tuple node-id identity-hashcode ;
 
 GENERIC: node-label ( node -- str )
 
 M: object node-label
     present ;
 
-M: node node-label
-    class-of ;
+! Return a list of graphviz input edges to connect the two nodes
+GENERIC: input-edges ( input vertex -- edges )
 
-M: #call node-label
-    word>> ;
+M: object input-edges [ node-id ] bi@ <edge> 1array ;
 
-M: #push node-label
+M: tuple node-id identity-hashcode ;
+
+! compiler tree node names for use in record labels
+GENERIC: node-name ( x -- x )
+
+M: node node-name
+    class-of name>> ;
+
+M: #call node-name
+    word>> name>> ;
+
+M: #push node-name
     literal>> present "'" dup surround ;
 
-PRIVATE>
+M: node node-label
+    [ node-uses-values [ nip dup "<i%d> i%d" sprintf ] map-index " | " join ]
+    [ node-name " | %s | " sprintf ]
+    [ node-defs-values [ nip dup "<o%d> o%d" sprintf ] map-index " | " join ]
+    tri append append ;
+
+M: node set-node-attributes*
+    drop
+    "record" =shape ;
+
+<PRIVATE
 
 ! In the internal graph repesentation, source nodes don't have an entry. This
 ! creates an empty entry for each source node.
@@ -124,22 +177,33 @@ PRIVATE>
         ] each
     ] each ;
 
+: vertex>node ( vertex -- node )
+    [ node-id <node> ] keep
+    [ node-label =label ]
+    [ [ attributes>> ] dip set-node-attributes* drop ] 2bi
+    ;
+
+PRIVATE>
+
 : digraph>graphviz ( assoc -- graph )
     ensure-source-nodes
     <digraph> swap
     [ [
-            [ node-id ] [ members ] bi*
-            [ node-id swap add-edge ] with each ]
+            members
+            [ swap input-edges [ add ] each ] with each ]
         [
-            drop [ node-id <node> ] [ node-label ] bi
-            =label add
+            ! drop [ node-id <node> ] [ node-label ] bi
+            ! =label add
+            drop vertex>node add
         ] 2bi
     ] assoc-each ;
 
-
-: tree. ( word/quot -- )
-   frontend tree>digraph digraph>graphviz
+: digraph. ( digraph -- )
+    digraph>graphviz
     [
         "preview" png
         "preview.png" <image-gadget> <scroller> "CDFG" open-window
     ] with-temp-directory ;
+
+: tree. ( word/quot -- )
+    frontend tree>digraph digraph. ;
