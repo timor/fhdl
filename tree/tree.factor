@@ -47,8 +47,9 @@ FROM: namespaces => set ;
 
 : add-node-to-graph ( graph node -- graph' )
     [ swap [ drop HS{ } clone ] cache drop ] 2keep
-    [ node-inputs [ swap add-edge-to-vertex ] assoc-each ]
-    [ node-outputs [ add-edge-to-vertex ] assoc-each ] bi
+    [ dup node-uses-values [ add-edge-to-vertex ] with each ]
+    [ dup node-defs-values [ swap add-edge-to-vertex ] with each ]
+    bi
     ;
 
 PRIVATE>
