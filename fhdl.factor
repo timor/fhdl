@@ -125,6 +125,9 @@ TUPLE: reg-var < wire-var { clock initial: "clock" } ;
 : <reg> ( value -- var )
     number>string "r_" prepend reg-var new-var ;
 
+TUPLE: parameter < verilog-var value ;
+: <parameter> ( value -- var )
+    number>string "p_" prepend parameter new-var ;
 TUPLE: module name inputs outputs variables ;
 
 <PRIVATE
