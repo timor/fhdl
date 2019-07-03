@@ -96,13 +96,19 @@ M: node add-input-edges
 
 
 ! TODO better name
+: fhdl-optimize ( nodes  -- nodes )
+    analyze-recursive normalize propagate cleanup-tree dup
+    run-escape-analysis?
+    [ escape-analysis unbox-tuples ] when
+    apply-identities compute-def-use remove-dead-code ?check
+    compute-def-use
+    optimize-modular-arithmetic
+    ! finalize
+    ;
+
 : each-node-with-def-use-info ( tree quot: ( node -- ) -- )
     '[
-        analyze-recursive normalize propagate cleanup-tree dup
-        run-escape-analysis?
-        [ escape-analysis unbox-tuples ] when
-        apply-identities compute-def-use remove-dead-code ?check
-        compute-def-use optimize-modular-arithmetic finalize
+        fhdl-optimize
         [ _ call( node -- ) ] each-node
     ] with-scope ;
 
