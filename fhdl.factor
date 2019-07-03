@@ -7,7 +7,7 @@ sequences typed words ;
 IN: fhdl
 
 ! Data Types which are supposed to be synthesizable
-PREDICATE: uint8 < integer [ 0 >= ] [ 256 < ] bi and ;
+PREDICATE: uint8 < fixnum [ 0 >= ] [ 256 < ] bi and ;
 
 SYMBOL: state
 state [ IH{  } clone ] initialize
