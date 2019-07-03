@@ -6,7 +6,7 @@ compiler.tree.def-use compiler.tree.escape-analysis
 compiler.tree.escape-analysis.check compiler.tree.finalization
 compiler.tree.identities compiler.tree.modular-arithmetic
 compiler.tree.normalization compiler.tree.optimizer compiler.tree.propagation
-compiler.tree.recursive compiler.tree.tuple-unboxing formatting graphviz
+compiler.tree.recursive compiler.tree.tuple-unboxing formatting fry graphviz
 graphviz.notation graphviz.render images.viewer io.files.temp kernel locals
 namespaces present sequences ui ui.gadgets.scrollers ;
 IN: fhdl.tree
@@ -94,22 +94,26 @@ M: node add-input-edges
     ]
     ;
 
-: tree>graphviz ( nodes -- graph )
-    [
+
+! TODO better name
+: each-node-with-def-use-info ( tree quot: ( node -- ) -- )
+    '[
         analyze-recursive normalize propagate cleanup-tree dup
         run-escape-analysis?
         [ escape-analysis unbox-tuples ] when
         apply-identities compute-def-use remove-dead-code ?check
         compute-def-use optimize-modular-arithmetic finalize
-        ! compute-def-use
-        <digraph> swap
+        [ _ call( node -- ) ] each-node
+    ] with-scope ;
+
+
+: tree>graphviz ( nodes -- graph )
+    <digraph> swap
         [
             [ add-tree-node ]
             [ add-input-edges ]
             bi
-        ] each-node
-    ] with-scope
-    ;
+        ] each-node-with-def-use-info ;
 
 
 : tree. ( word/quot -- )
