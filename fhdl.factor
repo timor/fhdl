@@ -104,7 +104,7 @@ M: reg-node node-inputs-info.
 ! SYMBOLS: value-var-mappings ;
 TUPLE: verilog-var
     name
-    { width initial: 0 }
+    width
     ;
 : new-var ( name class -- var )
     new swap >>name ;
