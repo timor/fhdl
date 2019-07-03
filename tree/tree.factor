@@ -1,9 +1,14 @@
 ! Copyright (C) 2019 martinb.
 ! See http://factorcode.org/license.txt for BSD license.
-USING: accessors assocs classes compiler compiler.tree compiler.tree.combinators
-compiler.tree.def-use formatting graphviz graphviz.notation graphviz.render
-images.viewer io.files.temp kernel locals namespaces present sequences ui
-ui.gadgets.scrollers ;
+USING: accessors assocs classes compiler compiler.tree compiler.tree.builder
+compiler.tree.cleanup compiler.tree.combinators compiler.tree.dead-code
+compiler.tree.def-use compiler.tree.escape-analysis
+compiler.tree.escape-analysis.check compiler.tree.finalization
+compiler.tree.identities compiler.tree.modular-arithmetic
+compiler.tree.normalization compiler.tree.optimizer compiler.tree.propagation
+compiler.tree.recursive compiler.tree.tuple-unboxing formatting graphviz
+graphviz.notation graphviz.render images.viewer io.files.temp kernel locals
+namespaces present sequences ui ui.gadgets.scrollers ;
 IN: fhdl.tree
 
 FROM: compiler.tree => node node? ;
@@ -91,7 +96,12 @@ M: node add-input-edges
 
 : tree>graphviz ( nodes -- graph )
     [
-        compute-def-use
+        analyze-recursive normalize propagate cleanup-tree dup
+        run-escape-analysis?
+        [ escape-analysis unbox-tuples ] when
+        apply-identities compute-def-use remove-dead-code ?check
+        compute-def-use optimize-modular-arithmetic finalize
+        ! compute-def-use
         <digraph> swap
         [
             [ add-tree-node ]
@@ -103,7 +113,7 @@ M: node add-input-edges
 
 
 : tree. ( word/quot -- )
-    frontend
+    build-tree
     tree>graphviz
     [
         "preview" png
