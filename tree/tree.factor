@@ -51,7 +51,7 @@ M: #call node-name
     word>> name>> ;
 
 M: #push node-name
-    literal>> present "'" dup surround ;
+    literal>> "%u" sprintf "'" dup surround ;
 
 M: node vertex-label
     [ node-uses-values [ nip dup "<i%d> i%d" sprintf ] map-index " | " join ]
