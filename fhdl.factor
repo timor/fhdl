@@ -20,16 +20,19 @@ PRIVATE>
 
 ! TODO: use reg as a macro/call inside the combinators to generate an actual
 ! state-holding node
-: reg ( x -- x ) dup 1array "dummy" set-state ;
+: reg ( x i -- x ) state get 2dup at [ set-at ] dip [ 0 ] unless* ;
+
+: [reg] ( -- quot )
+    gensym [ reg ] curry ;
 
 ! generate a register chain with parallel outputs, input is a sequence of
 ! quotations which are applied to each output value
 
 : [map-reg-chain] ( quots -- quot )
-    [ [ dup reg ] append ] map concat ;
+    [ [reg] '[ _ _ bi ] ] map concat ;
 
 : [delay-line] ( l -- quot )
-    [ ] <repetition> [map-reg-chain] ;
+    [ drop ] <repetition> [map-reg-chain] ;
 
 ! This would be used if we wanted to perform the computation immediately
 MACRO: delay-line ( l -- quot )
