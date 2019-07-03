@@ -50,8 +50,8 @@ MACRO: delay-line ( l -- quot )
 MACRO: fir ( coeffs -- quot )
     [fir] ;
 
-TYPED: fir8 ( x: uint8 -- y: uint8 )
-    { 10 20 -20 10 } fir ;
+TYPED: fir8 ( x: uint8 -- y )
+    { 1 2 -2 1 } fir ;
 
 : example ( -- )
     { 1 -2 3 -4 } [fir] tree. ;
