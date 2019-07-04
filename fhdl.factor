@@ -134,7 +134,10 @@ PRIVATE>
     swap pick variables>> set-at ;
 
 : get-var ( module value -- var )
-    swap variables>> [ <wire> ] cache ;
+    [ swap variables>> [ <wire> ] cache ]
+    [ value-width ] bi >>width
+    ;
+
 
 ! Main generation hook: each node is supposed to modify the variables slot of
 ! the module
