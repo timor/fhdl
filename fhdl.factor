@@ -65,21 +65,6 @@ PREDICATE: reg-node < #call  word>> \ reg = ;
 ! HACK the value info to copy the input info, this ensures correct value type propagation
 \ reg [ drop clone ] "outputs" set-word-prop
 
-GENERIC: node-inputs-info. ( node -- )
-
-UNION: using-node #call #return ;
-
-M: object node-inputs-info. drop ;
-M: using-node node-inputs-info. node-input-infos . ;
-M: reg-node node-inputs-info.
-    node-input-infos but-last . ;
-
-! Helper: print node info
-: nodes-info. ( word/quot -- )
-    build-tree
-    [ dup . node-inputs-info. ]
-    each-node-with-def-use-info ;
-
 ! typed effect elements are tuples, we only want the name
 : effect-elt-name ( elt -- str )
     dup array? [ first ] when ;
@@ -90,16 +75,8 @@ M: reg-node node-inputs-info.
     [ in>> [ [ effect-elt-name "_in" append ] dip number>string append ] map-index ]
     [ out>> [ [ effect-elt-name "_out" append ] dip number>string append ] map-index ] bi ;
 
-: word>inputs ( word -- seq )
-    word>inputs/outputs drop ;
 
-: word>outputs ( word -- seq )
-    word>inputs/outputs nip ;
 
-: word>module-header ( word -- str )
-    [ name>> ] [ word>inputs/outputs ] bi
-    append ", " join
-    "module %s(%s)" sprintf ;
 
 ! SYMBOLS: value-var-mappings ;
 TUPLE: verilog-var
