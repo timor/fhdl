@@ -1,11 +1,11 @@
 ! Copyright (C) 2019 martinb.
 ! See http://factorcode.org/license.txt for BSD license.
 USING: accessors arrays assocs combinators compiler.tree
-compiler.tree.combinators compiler.tree.propagation.info definitions effects
-fhdl.tree formatting fry hashtables.identity io kernel kernel.private
-linked-assocs locals macros math math.intervals math.parser math.private
-namespaces quotations sequences sequences.zipped sets stack-checker typed words
-;
+compiler.tree.combinators compiler.tree.propagation.copy
+compiler.tree.propagation.info definitions effects fhdl.tree formatting fry
+hashtables.identity io kernel kernel.private linked-assocs locals macros math
+math.intervals math.parser math.partial-dispatch math.private namespaces
+quotations sequences sequences.zipped sets stack-checker typed words ;
 IN: fhdl
 
 ! Data Types which are supposed to be synthesizable
@@ -93,29 +93,32 @@ TUPLE: reg-var < wire-var { clock initial: "clock" } ;
 : <reg> ( value -- var )
     number>string "reg_" prepend reg-var new-var ;
 
-TUPLE: parameter < verilog-var value ;
+TUPLE: parameter < verilog-var literal ;
 : <parameter> ( value -- var )
     number>string "literal_" prepend parameter new-var ;
+M: parameter name>> literal>> number>string ;
+
+! *** Instances
+TUPLE: instance mod-name inputs outputs ;
+
+: instance-name ( instance -- str )
+    identity-hashcode number>string "inst_" prepend ;
+
+: <instance> ( mod-name inputs outputs -- obj )
+    pick instance-name '[ [ _ "_%s_out" sprintf append ] change-name ] map
+    instance boa ;
 
 ! ** Verilog module
 
-TUPLE: module name inputs outputs variables definition tree ;
-
-! GENERIC: quot>module ( word -- obj )
+! TODO: maybe remove tree and definition if only used for debugging
+TUPLE: module name inputs outputs variables instances definition tree ;
 
 : <module> ( name definition -- x )
     module new swap >>definition
     swap >>name
-    LH{ } clone >>variables ;
-
-! M: word quot>module
-!     [ name>> ] [ word>inputs/outputs ] bi <module> ;
-
-! ! For typed words, we take the typed definition
-! M: typed-word quot>module
-!     [ "typed-word" word-prop quot>module ] [ name>> ] bi >>name ;
-! M: callable quot>module
-!     "anon" swap word>inputs/outputs <module> ;
+    LH{ } clone >>variables
+    V{ } clone >>instances
+    ;
 
 <PRIVATE
 ! depends on stack-checker scope!
@@ -123,8 +126,13 @@ TUPLE: module name inputs outputs variables definition tree ;
     value-info interval>> interval-length log2 1 + ;
 PRIVATE>
 
-: add-var ( module value var -- module )
+GENERIC: add-var ( module value var -- module )
+
+M: verilog-var add-var
     over value-width >>width
+    swap pick variables>> set-at ;
+
+M: parameter add-var
     swap pick variables>> set-at ;
 
 : get-var ( module value -- var )
@@ -143,9 +151,13 @@ M: #introduce node>verilog
     out-d>> over inputs>>
     [ <input> add-var ] 2each ;
 
+M: #push node>verilog
+    [ out-d>> first dup <parameter> ] [ literal>> >>literal ] bi add-var
+    ;
+
 <PRIVATE
 : defining-variable ( module value -- var )
-    ! resolve-copy ! should not have any influence
+    resolve-copy ! should not have any influence
     get-var ;
 PRIVATE>
 
@@ -157,11 +169,18 @@ M: reg-node node>verilog ( module node -- module )
     ;
 
 ! All non-primitive calls would be translated into module instantiations
-M: #call node>verilog
-    word>> name>> "Skipping #call to '%s'!\n" printf
+M:: #call node>verilog ( module node -- module )
+    node [ word>> name>> ]
+    [ in-d>> [ module swap get-var ] map ]
+    [ out-d>> module swap [ dup <wire> [ add-var ] keep ] map ] tri nip
+   <instance> module instances>> push
+    module
     ;
 
-PREDICATE: add-call < #call word>> \ fixnum+ = ;
+CONSTANT: add-op-words { fixnum+ +-integer-integer +-fixnum-integer }
+CONSTANT: mul-op-words { fixnum* }
+PREDICATE: add-call < #call word>> add-op-words member? ;
+PREDICATE: mul-call < #call word>> mul-op-words member? ;
 
 : verilog-assign ( lhs rhs -- str )
     "assign %s = %s;" sprintf ;
@@ -177,6 +196,13 @@ M:: add-call node>verilog ( module node -- node )
     node out-d>> first dup <wire> :> ( value var )
     module node in-d>> [ defining-variable name>> ] with map :> inputs
     var name>> inputs first2 "%s + %s" sprintf verilog-assign var assignment<<
+    module value var add-var ;
+
+! TODO: generalize to binary operators
+M:: mul-call node>verilog ( module node -- node )
+    node out-d>> first dup <wire> :> ( value var )
+    module node in-d>> [ defining-variable name>> ] with map :> inputs
+    var name>> inputs first2 "%s * %s" sprintf verilog-assign var assignment<<
     module value var add-var ;
 
 ! convert the module's output sequence into an assoc with the definitions
@@ -262,6 +288,7 @@ GENERIC: var-decl ( var -- str )
 M: input-var var-decl "input" range-decl ;
 M: wire-var var-decl "wire" range-decl ;
 M: reg-var var-decl "reg" range-decl ;
+M: parameter var-decl drop "" ;
 
 GENERIC: var-def ( var -- str )
 M: input-var var-def drop "" ;
@@ -270,6 +297,18 @@ M: reg-var var-def
     [ clock>> ] [ assignment>> ] bi
     "always @(posedge %s)\n  %s;" sprintf
     ;
+M: parameter var-def drop "" ;
+
+! *** Printing Instances
+: instance-outputs-decls ( instance -- str )
+    outputs>> [ var-decl ] map "\n" join ;
+
+:: instance-definition ( instance -- str )
+    instance
+    [ instance-name ]
+    [ mod-name>> ]
+    [ [ inputs>> ] [ outputs>> ] bi append sift [ name>> ] map ", " join ] tri
+    "%s %s(%s);" sprintf ;
 PRIVATE>
 
 : print-verilog ( module -- )
@@ -277,8 +316,10 @@ PRIVATE>
         [ module-begin print ]
         [ module-clocks-decl print ]
         [ outputs-declarations print ]
+        [ instances>> [ instance-outputs-decls print ] each ]
         [ variables>> >alist values members
           [ [ var-decl print ] each ] [ [ var-def print ] each ] bi ]
+        [ instances>> [ instance-definition print ] each ]
         [ outputs-assignments print ]
     } cleave
     "endmodule" print ;
