@@ -3,8 +3,8 @@
 USING: accessors arrays assocs combinators compiler.tree compiler.tree.builder
 compiler.tree.propagation.copy compiler.tree.propagation.info effects fhdl.tree
 formatting fry hashtables.identity io kernel kernel.private linked-assocs locals
-macros math math.intervals math.parser math.private namespaces prettyprint
-sequences sets typed words ;
+macros math math.intervals math.parser math.private namespaces quotations
+sequences sets stack-checker typed words ;
 IN: fhdl
 
 ! Data Types which are supposed to be synthesizable
@@ -70,13 +70,18 @@ PREDICATE: reg-node < #call  word>> \ reg = ;
     dup array? [ first ] when ;
 
 ! generate list of names that identify verilog module inputs and output
-: word>inputs/outputs ( word -- in-seq out-seq )
-    stack-effect
+: effect>inputs/outputs ( effect -- in-seq out-seq )
     [ in>> [ [ effect-elt-name "_in" append ] dip number>string append ] map-index ]
-    [ out>> [ [ effect-elt-name "_out" append ] dip number>string append ] map-index ] bi ;
+    [ out>> [ [ effect-elt-name "_out" append ] dip number>string append ] map-index ] bi
+    ;
 
+GENERIC: word>inputs/outputs ( word -- in-seq out-seq )
+M: callable word>inputs/outputs
+    infer effect>inputs/outputs ;
 
-
+M: word word>inputs/outputs
+    stack-effect
+    effect>inputs/outputs ;
 
 ! SYMBOLS: value-var-mappings ;
 TUPLE: verilog-var
@@ -106,8 +111,17 @@ TUPLE: parameter < verilog-var value ;
 
 TUPLE: module name inputs outputs variables ;
 
-: <module> ( word -- obj )
-    [ name>> ] [ word>inputs/outputs ] bi LH{ } clone module boa ;
+GENERIC: quot>module ( word -- obj )
+
+: <module> ( name inputs outputs -- x )
+    LH{ } clone module boa ;
+
+M: word quot>module
+    [ name>> ] [ word>inputs/outputs ] bi <module> ;
+M: typed-word quot>module
+    "typed-word" word-prop quot>module ;
+M: callable quot>module
+    "anon" swap word>inputs/outputs <module> ;
 
 <PRIVATE
 ! depends on stack-checker scope!
@@ -168,7 +182,7 @@ M: #return node>verilog
 
 ! Call quot for each node, which is expected to return a sequence of verilog variables
 : make-module ( word -- module )
-    [ <module> ] keep
+    [ quot>module ] keep
     build-tree
     [
         node>verilog
