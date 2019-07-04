@@ -1,10 +1,11 @@
 ! Copyright (C) 2019 martinb.
 ! See http://factorcode.org/license.txt for BSD license.
-USING: accessors arrays assocs combinators compiler.tree compiler.tree.builder
-compiler.tree.propagation.copy compiler.tree.propagation.info effects fhdl.tree
-formatting fry hashtables.identity io kernel kernel.private linked-assocs locals
-macros math math.intervals math.parser math.private namespaces quotations
-sequences sets stack-checker typed words ;
+USING: accessors arrays assocs combinators compiler.tree
+compiler.tree.combinators compiler.tree.propagation.info definitions effects
+fhdl.tree formatting fry hashtables.identity io kernel kernel.private
+linked-assocs locals macros math math.intervals math.parser math.private
+namespaces quotations sequences sequences.zipped sets stack-checker typed words
+;
 IN: fhdl
 
 ! Data Types which are supposed to be synthesizable
@@ -72,24 +73,6 @@ PREDICATE: reg-node < #call  word>> \ reg = ;
 ! HACK the value info to copy the input info, this ensures correct value type propagation
 \ reg [ drop clone ] "outputs" set-word-prop
 
-! typed effect elements are tuples, we only want the name
-: effect-elt-name ( elt -- str )
-    dup array? [ first ] when ;
-
-! generate list of names that identify verilog module inputs and output
-: effect>inputs/outputs ( effect -- in-seq out-seq )
-    [ in>> [ [ effect-elt-name "_in" append ] dip number>string append ] map-index ]
-    [ out>> [ [ effect-elt-name "_out" append ] dip number>string append ] map-index ] bi
-    ;
-
-GENERIC: word>inputs/outputs ( word -- in-seq out-seq )
-M: callable word>inputs/outputs
-    infer effect>inputs/outputs ;
-
-M: word word>inputs/outputs
-    stack-effect
-    effect>inputs/outputs ;
-
 ! SYMBOLS: value-var-mappings ;
 TUPLE: verilog-var
     name
@@ -104,31 +87,35 @@ TUPLE: input-var < verilog-var ;
 
 TUPLE: wire-var < verilog-var assignment ;
 : <wire> ( value -- var )
-    number>string "w_" prepend wire-var new-var ;
+    number>string "value_" prepend wire-var new-var ;
 
 TUPLE: reg-var < wire-var { clock initial: "clock" } ;
 : <reg> ( value -- var )
-    number>string "r_" prepend reg-var new-var ;
+    number>string "reg_" prepend reg-var new-var ;
 
 TUPLE: parameter < verilog-var value ;
 : <parameter> ( value -- var )
-    number>string "p_" prepend parameter new-var ;
+    number>string "literal_" prepend parameter new-var ;
 
 ! ** Verilog module
 
-TUPLE: module name inputs outputs variables ;
+TUPLE: module name inputs outputs variables definition tree ;
 
-GENERIC: quot>module ( word -- obj )
+! GENERIC: quot>module ( word -- obj )
 
-: <module> ( name inputs outputs -- x )
-    LH{ } clone module boa ;
+: <module> ( name definition -- x )
+    module new swap >>definition
+    swap >>name
+    LH{ } clone >>variables ;
 
-M: word quot>module
-    [ name>> ] [ word>inputs/outputs ] bi <module> ;
-M: typed-word quot>module
-    "typed-word" word-prop quot>module ;
-M: callable quot>module
-    "anon" swap word>inputs/outputs <module> ;
+! M: word quot>module
+!     [ name>> ] [ word>inputs/outputs ] bi <module> ;
+
+! ! For typed words, we take the typed definition
+! M: typed-word quot>module
+!     [ "typed-word" word-prop quot>module ] [ name>> ] bi >>name ;
+! M: callable quot>module
+!     "anon" swap word>inputs/outputs <module> ;
 
 <PRIVATE
 ! depends on stack-checker scope!
@@ -141,8 +128,7 @@ PRIVATE>
     swap pick variables>> set-at ;
 
 : get-var ( module value -- var )
-    [ swap variables>> [ <wire> ] cache ]
-    [ value-width ] bi >>width
+    swap variables>> at
     ;
 
 
@@ -159,7 +145,8 @@ M: #introduce node>verilog
 
 <PRIVATE
 : defining-variable ( module value -- var )
-    resolve-copy get-var ;
+    ! resolve-copy ! should not have any influence
+    get-var ;
 PRIVATE>
 
 M: reg-node node>verilog ( module node -- module )
@@ -179,6 +166,13 @@ PREDICATE: add-call < #call word>> \ fixnum+ = ;
 : verilog-assign ( lhs rhs -- str )
     "assign %s = %s;" sprintf ;
 
+! for rename nodes, we copy the verilog variable associations from the inputs to
+! the outputs
+M: #renaming node>verilog
+    dupd
+    [ variables>> ] [ inputs/outputs ] bi* swap
+    <zipped> [ pick at ] assoc-map assoc-union! drop ;
+
 M:: add-call node>verilog ( module node -- node )
     node out-d>> first dup <wire> :> ( value var )
     module node in-d>> [ defining-variable name>> ] with map :> inputs
@@ -190,16 +184,53 @@ M: #return node>verilog
     dupd in-d>> [ get-var ] with map
     '[ _ zip ] change-outputs ;
 
-! Call quot for each node, which is expected to return a sequence of verilog variables
-: make-module ( word -- module )
-    [ quot>module ] keep
-    build-tree
-    [
-        node>verilog
-    ] each-node-with-def-use-info
+<PRIVATE
+GENERIC: module-name ( quot/word -- module )
+M: callable module-name drop "anon" ;
+M: word module-name name>> ;
+
+GENERIC: module-def ( quot/word -- definition )
+M: callable module-def ;
+M: word module-def definition ;
+M: typed-word module-def "typed-word" word-prop module-def ;
+
+! typed effect elements are tuples, we only want the name
+: effect-elt-name ( elt -- str )
+    dup array? [ first ] when ;
+
+! generate list of names that identify verilog module inputs and output
+: effect>inputs/outputs ( effect -- in-seq out-seq )
+    [ in>> [ [ effect-elt-name "_in" append ] dip number>string append ] map-index ]
+    [ out>> [ [ effect-elt-name "_out" append ] dip number>string append ] map-index ] bi
     ;
 
-! ** Code generation
+GENERIC: word>inputs/outputs ( word -- in-seq out-seq )
+M: callable word>inputs/outputs
+    infer effect>inputs/outputs ;
+
+M: word word>inputs/outputs
+    stack-effect
+    effect>inputs/outputs ;
+
+! Initialize a module struct from a quotation or word
+PRIVATE>
+
+
+! Call quot for each node, which is expected to return a sequence of verilog variables
+:: build-module ( code -- module )
+    code [ module-name ] [ module-def ] bi <module> :> mod
+    code word>inputs/outputs [ mod inputs<< ] [ mod outputs<< ] bi*
+    mod dup definition>>
+    [
+        build-fhdl-tree
+        [ >>tree ] keep
+        [
+            node>verilog
+        ] each-node
+    ] with-scope
+    ;
+
+! ** Verilog Code generation
 
 <PRIVATE
 : module-clocks ( module -- seq )
@@ -211,7 +242,7 @@ M: #return node>verilog
 : module-begin ( module -- str )
     [ [ name>> ] keep module-clocks ] [ inputs>> ] [ outputs>> keys ] tri
     append append ", " join
-    "module %s(%s)" sprintf ;
+    "module %s(%s);" sprintf ;
 
 : var-range ( var -- str )
     width>> 1 - "[%s:0]" sprintf ;
@@ -237,30 +268,43 @@ M: input-var var-def drop "" ;
 M: wire-var var-def assignment>> ;
 M: reg-var var-def
     [ clock>> ] [ assignment>> ] bi
-    "always @(posedge %s)\n  %s" sprintf
+    "always @(posedge %s)\n  %s;" sprintf
     ;
 PRIVATE>
-
 
 : print-verilog ( module -- )
     {
         [ module-begin print ]
         [ module-clocks-decl print ]
         [ outputs-declarations print ]
-        [ variables>> >alist values
+        [ variables>> >alist values members
           [ [ var-decl print ] each ] [ [ var-def print ] each ] bi ]
         [ outputs-assignments print ]
     } cleave
     "endmodule" print ;
 
+: verilog. ( quot/word -- )
+    build-module print-verilog ;
 
 ! ** Examples
-: ex-fir ( -- )
+: ex-fir-tree ( -- )
     { 1 -2 3 -4 } [fir] tree. ;
+
+: ex-fir-typed ( -- )
+    { 1 -2 3 -4 } [fir] [ { uint8 } declare ] prepend tree. ;
 
 : test-registered-adder ( a b -- c )
     { fixnum fixnum } declare
     + >reg ;
 
 : ex-adder ( -- )
-   \ test-registered-adder make-module print-verilog ;
+   \ test-registered-adder build-module print-verilog ;
+
+: test-anon-adder ( -- quot )
+    [ { uint8 uint8 } declare + ] ;
+
+: ex-anon-module ( -- module )
+    test-anon-adder build-module ;
+
+: ex-anon ( -- )
+    test-anon-adder verilog. ;
