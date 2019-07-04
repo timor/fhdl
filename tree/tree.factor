@@ -1,14 +1,15 @@
 ! Copyright (C) 2019 martinb.
 ! See http://factorcode.org/license.txt for BSD license.
-USING: accessors assocs classes compiler compiler.tree compiler.tree.builder
+USING: accessors assocs classes combinators compiler.tree compiler.tree.builder
 compiler.tree.cleanup compiler.tree.combinators compiler.tree.dead-code
 compiler.tree.def-use compiler.tree.escape-analysis
-compiler.tree.escape-analysis.check compiler.tree.finalization
-compiler.tree.identities compiler.tree.modular-arithmetic
-compiler.tree.normalization compiler.tree.optimizer compiler.tree.propagation
-compiler.tree.recursive compiler.tree.tuple-unboxing formatting fry graphviz
-graphviz.notation graphviz.render images.viewer io.files.temp kernel locals
-namespaces present sequences ui ui.gadgets.scrollers ;
+compiler.tree.escape-analysis.check compiler.tree.identities
+compiler.tree.modular-arithmetic compiler.tree.normalization
+compiler.tree.optimizer compiler.tree.propagation compiler.tree.propagation.info
+compiler.tree.recursive compiler.tree.tuple-unboxing formatting graphviz
+graphviz.notation graphviz.render images.viewer io.files.temp kernel locals math
+math.intervals math.parser namespaces present prettyprint sequences strings ui
+ui.gadgets.scrollers ;
 IN: fhdl.tree
 
 FROM: compiler.tree => node node? ;
@@ -58,9 +59,29 @@ M: #call node-name
 M: #push node-name
     literal>> "%u" sprintf "'" dup surround ;
 
+<PRIVATE
+: intervall-length>str ( x -- x )
+    {
+        { [ dup 1/0. = ] [ drop "inf" ] }
+        { [ dup 0 = not ] [ log2 1 + number>string ] }
+        [ number>string ]
+    } cond ;
+
+: value-label ( value prefix -- str )
+    swap
+    value-info dup . interval>> interval-length intervall-length>str "(" ")" surround
+    append ;
+
+: escape-node-name ( str -- str )
+    [ [ 1string ] [ "{}<>|" member? ] bi [ "\\" prepend ] when ]
+    [ append ] map-reduce ;
+
+PRIVATE>
+
+
 M: node vertex-label
-    [ node-uses-values [ nip dup "<i%d> i%d" sprintf ] map-index " | " join ]
-    [ node-name " | %s | " sprintf ]
+    [ node-uses-values [ "i%d" sprintf [ value-label ] keep swap "<%s> %s" sprintf ] map-index " | " join ]
+    [ node-name escape-node-name " | %s | " sprintf ]
     [ node-defs-values [ nip dup "<o%d> o%d" sprintf ] map-index " | " join ]
     tri append append ;
 
@@ -106,24 +127,24 @@ M: node add-input-edges
     ! finalize
     ;
 
-: each-node-with-def-use-info ( tree quot: ( node -- ) -- )
-    '[
-        fhdl-optimize
-        [ _ call( node -- ) ] each-node
-    ] with-scope ;
-
+! Modifies compiler variable scope!
+: build-fhdl-tree ( quot/word -- nodes )
+    build-tree fhdl-optimize ;
 
 : tree>graphviz ( nodes -- graph )
-    <digraph> swap
+    [
+        <digraph> swap
         [
             [ add-tree-node ]
             [ add-input-edges ]
             bi
-        ] each-node-with-def-use-info ;
+        ] each-node
+    ] with-scope
+    ;
 
 
 : tree. ( word/quot -- )
-    build-tree
+    build-fhdl-tree
     tree>graphviz
     [
         "preview" png
