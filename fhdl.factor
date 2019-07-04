@@ -25,8 +25,11 @@ PRIVATE>
 
 : reg ( x i -- x ) state get 2dup at [ set-at ] dip [ 0 ] unless* ;
 
+! TODO: maybe put into extra vocab instead of parse-time
+<<
 : [reg] ( -- quot )
     gensym [ reg ] curry ;
+>>
 
 MACRO: >reg ( -- quot )
     [reg] ;
@@ -34,20 +37,24 @@ MACRO: >reg ( -- quot )
 ! generate a register chain with parallel outputs, input is a sequence of
 ! quotations which are applied to each output value
 
+<<
 : [map-reg-chain] ( quots -- quot )
     [ [reg] '[ _ _ bi ] ] map concat ;
 
 : [delay-line] ( l -- quot )
     [ drop ] <repetition> [map-reg-chain] ;
 
+>>
 ! This would be used if we wanted to perform the computation immediately
 MACRO: delay-line ( l -- quot )
     [delay-line] ;
 
+<<
 : [fir] ( coeffs -- quot )
     [ [ [ * ] curry ] map [map-reg-chain] ]
     [ length [ + ] <repetition> concat ] bi compose
     ;
+>>
 
 MACRO: fir ( coeffs -- quot )
     [fir] ;
