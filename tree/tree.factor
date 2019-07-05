@@ -124,6 +124,7 @@ M: node add-input-edges
     apply-identities compute-def-use remove-dead-code ?check
     compute-def-use
     optimize-modular-arithmetic
+    ! TODO reintroduce if no necessary info is lost
     ! finalize
     ;
 
