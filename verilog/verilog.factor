@@ -20,11 +20,6 @@ ERROR: unconstrained-value value ;
         [ nip interval-length log2 1 + "[%s:0]" sprintf ]
     } case ;
 
-: define-output-nets ( node -- node )
-    dup out-d>>
-    [ dup make-verilog-var set-value-name ] each
-    ;
-
 : var-definition ( value type -- str )
     swap [ value-verilog-range ] [ value-name ] bi
     "%s %s %s;" sprintf ;
@@ -37,17 +32,18 @@ ERROR: unconstrained-value value ;
 : effect-ports ( effect -- ins outs )
     [ in>> ] [ out>> ] bi
     "i" "o"
-    [ swap [ "%s%s_%d" sprintf ] with map-index ] bi-curry@ bi* ;
+    [ swap [ "%s_%s_%d" sprintf ] with map-index ] bi-curry@ bi* ;
 
-! ! TODO: widths
-! : ports-declaration ( node effect -- str )
-!     effect-ports "input" "output" [ swap [ "%s %s" sprintf ] with map ] bi-curry@ bi* append
-!     ",\n " join ;
-
-: net-assignment ( value output -- str )
-    swap value-name "assign %s = %s;" sprintf ;
+: define-output-nets ( node -- node )
+    dup out-d>>
+    [ dup make-verilog-var set-value-name ] each
+    dup out-d>> [ wire-definition print nl ] each
+    ;
 
 PRIVATE>
+
+: net-assignment ( lhs-value rhs -- str )
+    "assign %s = %s;" sprintf ;
 
 ! * Verilog Code Generation from SSA Tree Node
 
@@ -71,8 +67,6 @@ M: #introduce node>verilog
 M: #call node>verilog
     define-output-nets
 
-    dup out-d>> [ wire-definition print nl ] each
-
     [ identity-hashcode "inst_%d" sprintf ]
     [ word>> name>> ]
     [ in-d>> [ value-name ] map ", " join ] tri
@@ -88,11 +82,18 @@ M: #push node>verilog
 M: #renaming node>verilog
     inputs/outputs swap [ value-name set-value-name ] 2each ;
 
+<PRIVATE
+! FIXME: this duplicated code from net-assignment and var-definiton. If either of those
+! change, a better abstraction is probably needed.
+: output-port-decl-def ( port value -- str )
+    [ value-verilog-range swap "output %s %s;" sprintf ]
+    [ value-name " assign %s = %s;" sprintf ] 2bi append ;
+PRIVATE>
+
 M: #return node>verilog
     in-d>>
-    dup [ "output" var-definition print ] each
     module-effect effect-ports nip
-    [ net-assignment print ] 2each
+    [ swap output-port-decl-def print ] 2each
     "endmodule" print ;
 
 M: #declare node>verilog drop ;
