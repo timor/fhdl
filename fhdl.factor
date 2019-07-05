@@ -215,14 +215,6 @@ M: #return node>verilog
     '[ _ zip ] change-outputs ;
 
 <PRIVATE
-GENERIC: module-name ( quot/word -- module )
-M: callable module-name drop "anon" ;
-M: word module-name name>> ;
-
-GENERIC: module-def ( quot/word -- definition )
-M: callable module-def ;
-M: word module-def definition ;
-M: typed-word module-def "typed-word" word-prop module-def ;
 
 ! typed effect elements are tuples, we only want the name
 : effect-elt-name ( elt -- str )
