@@ -6,14 +6,22 @@ compiler.tree.def-use compiler.tree.escape-analysis
 compiler.tree.escape-analysis.check compiler.tree.identities
 compiler.tree.modular-arithmetic compiler.tree.normalization
 compiler.tree.optimizer compiler.tree.propagation compiler.tree.propagation.info
-compiler.tree.recursive compiler.tree.tuple-unboxing formatting graphviz
+compiler.tree.recursive compiler.tree.tuple-unboxing fhdl formatting graphviz
 graphviz.notation graphviz.render images.viewer io.files.temp kernel locals math
 math.intervals math.parser namespaces present prettyprint sequences strings ui
-ui.gadgets.scrollers ;
+ui.gadgets.scrollers words ;
 IN: fhdl.tree
 
 FROM: compiler.tree => node node? ;
 FROM: namespaces => set ;
+
+! * Special treatment of reg-pseudocall
+
+PREDICATE: reg-node < #call
+    word>> \ reg = ;
+
+! HACK the value info to copy the input info, this ensures correct value type propagation
+\ reg [ drop clone ] "outputs" set-word-prop
 
 ! * Directed Graph construction
 

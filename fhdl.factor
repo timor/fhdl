@@ -65,11 +65,6 @@ TYPED: fir8 ( x: uint8 -- y )
 
 ! * Generating Verilog output
 
-PREDICATE: reg-node < #call  word>> \ reg = ;
-
-! HACK the value info to copy the input info, this ensures correct value type propagation
-\ reg [ drop clone ] "outputs" set-word-prop
-
 ! SYMBOLS: value-var-mappings ;
 TUPLE: verilog-var
     name
