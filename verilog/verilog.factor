@@ -1,7 +1,18 @@
-USING: accessors combinators compiler.tree compiler.tree.propagation.info
-formatting io kernel math math.intervals math.parser module.factor sequences ;
+USING: accessors combinators compiler.tree compiler.tree.def-use.simplified
+compiler.tree.propagation.info fhdl.module fhdl.tree formatting io kernel math
+math.intervals math.parser sequences shuffle variables ;
 
 IN: fhdl.verilog
+
+! * Clocks and resets
+
+! Per default, each module gets prefixed with a clock and an async reset value implicitly,
+! which is connected to all registers implicitly
+
+GLOBAL: clock-name
+GLOBAL: reset-name
+"clock" set: clock-name
+"reset" set: reset-name
 
 ! * Verilog representations
 
@@ -40,6 +51,24 @@ ERROR: unconstrained-value value ;
     dup out-d>> [ wire-definition print nl ] each
     ;
 
+: reg-var-assignment ( reg-name source-name -- str )
+    "%s <= %s;" sprintf ;
+
+: wrap-begin-block ( str -- str )
+    "begin\n" "\nend" surround ;
+
+: if-else-statement ( cond then else -- str )
+    [ "if(%s)\n" sprintf ] [ " " prepend ] [ "\nelse\n " prepend ] tri*
+    append append ;
+
+: reg-always-block ( source-val-name reg-val-name clock reset -- str )
+    [ "always @(posedge %s or posedge %s) " sprintf ] keep
+    "%s == 1'b1" sprintf
+    2swap [ nip 0 reg-var-assignment ] [ swap reg-var-assignment ] 2bi
+    if-else-statement
+    wrap-begin-block append ;
+
+
 PRIVATE>
 
 : net-assignment ( lhs-value rhs -- str )
@@ -53,8 +82,12 @@ GENERIC: node>verilog ( node -- )
 ! TODO: rewrite with combinators
 M: #introduce node>verilog
     module-name
-    module-effect effect-ports append ", " join
-    "module %s(%s);" printf nl
+    module-effect effect-ports append
+    reset-name prefix clock-name prefix
+    ", " join
+    "module \\%s (%s);" printf nl
+    clock-name "input %s;" printf nl
+    reset-name "input %s;" printf nl
 
     out-d>>
     module-effect effect-ports drop
@@ -72,12 +105,32 @@ M: #call node>verilog
     [ in-d>> [ value-name ] map ", " join ] tri
     "%s \\%s (%s);" printf nl ;
 
+
+M: reg-node node>verilog
+    [ out-d>> first ] [ in-d>> first ] bi
+    over [ dup make-verilog-var set-value-name ] [ "reg" var-definition print ] bi
+    swap [ value-name ] bi@ clock-name reset-name reg-always-block print
+
+    ! [ out-d>> first dup <reg> ]
+    ! [ in-d>> first defining-variable name>> ] 2bi
+    ! over name>> swap "%s <= %s" sprintf >>assignment
+    ! add-var
+    ;
+
+<PRIVATE
 GENERIC: literal>verilog ( literal -- str )
 M: number literal>verilog number>string ;
 M: boolean literal>verilog "1" "0" ? ;
 
+: reg-push-node? ( node -- ? )
+    out-d>> first actually-used-by first node>> reg-node? ;
+PRIVATE>
+
 M: #push node>verilog
-    [ out-d>> first ] [ literal>> literal>verilog ] bi set-value-name ;
+    dup reg-push-node?
+    [ drop ] [
+        [ out-d>> first ] [ literal>> literal>verilog ] bi set-value-name
+    ] if ;
 
 M: #renaming node>verilog
     inputs/outputs swap [ value-name set-value-name ] 2each ;

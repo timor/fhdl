@@ -1,6 +1,6 @@
 USING: accessors assocs compiler.tree fhdl.module fhdl.verilog
 fhdl.verilog.private formatting io kernel math.partial-dispatch math.private
-module.factor sequences sets ;
+sequences sets ;
 
 IN: fhdl.verilog.operators
 

@@ -2,12 +2,10 @@ USING: accessors assocs compiler.tree.combinators definitions compiler.tree.def-
 kernel locals namespaces quotations sequences stack-checker typed variables
 words ;
 
-IN: module.factor
+IN: fhdl.module
 
 
 ! * Iterating over High-Level IR Tree with hardware module context
-
-
 
 ! * State During Tree Walk
 ! stack effect of the current definition being output
@@ -63,8 +61,8 @@ M: callable get-module-effect infer ;
 M: word get-module-effect stack-effect ;
 M: typed-word get-module-effect
     "typed-word" word-prop stack-effect
-    [ [ first ] map ] change-in
-    [ [ first ] map ] change-out
+    [ in>> ] [ out>> ] bi
+    [ [ first ] map ] bi@ <effect>
     ;
 
 GENERIC: get-module-def ( quot/word -- definition )

@@ -2,7 +2,8 @@
 ! See http://factorcode.org/license.txt for BSD license.
 USING: accessors arrays assocs combinators compiler.tree
 compiler.tree.combinators compiler.tree.propagation.copy
-compiler.tree.propagation.info definitions effects fhdl.tree formatting fry
+compiler.tree.propagation.info definitions effects fhdl.tree fhdl.verilog fhdl.verilog.operators
+formatting fry
 hashtables.identity io kernel kernel.private linked-assocs locals macros math
 math.intervals math.parser math.partial-dispatch math.private namespaces
 quotations sequences sequences.zipped sets stack-checker typed words ;
@@ -63,28 +64,6 @@ MACRO: fir ( coeffs -- quot )
 TYPED: fir8 ( x: uint8 -- y )
     { 1 2 -2 1 } fir ;
 
-! * Generating Verilog output
-
-
-
-M: reg-node node>verilog_old ( module node -- module )
-    [ out-d>> first dup <reg> ]
-    [ in-d>> first defining-variable name>> ] 2bi
-    over name>> swap "%s <= %s" sprintf >>assignment
-    add-var
-    ;
-
-
-! ** Verilog Code generation
-
-<PRIVATE
-: module-clocks ( module -- seq )
-    variables>> values [ reg-var? ] filter [ clock>> ] map members ;
-
-: module-clocks-decl ( module -- str )
-    module-clocks [ "input %s;" sprintf ] map "\n" join ;
-
-
 : verilog. ( quot/word -- )
     code>verilog ;
 
@@ -100,13 +79,13 @@ M: reg-node node>verilog_old ( module node -- module )
     + >reg ;
 
 : ex-adder ( -- )
-   \ test-registered-adder build-module print-verilog ;
+   \ test-registered-adder verilog. ;
 
 : test-anon-adder ( -- quot )
     [ { uint8 uint8 } declare + ] ;
 
-: ex-anon-module ( -- module )
-    test-anon-adder build-module ;
+: ex-anon-module ( -- )
+    test-anon-adder verilog. ;
 
 : ex-anon ( -- )
     test-anon-adder verilog. ;
