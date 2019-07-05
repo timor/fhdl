@@ -65,9 +65,6 @@ TYPED: fir8 ( x: uint8 -- y )
 
 ! * Generating Verilog output
 
-! This is inspired by the way confluence generates code.  An analyzed quotation
-! is turned into a module.
-
 PREDICATE: reg-node < #call  word>> \ reg = ;
 
 ! HACK the value info to copy the input info, this ensures correct value type propagation
@@ -108,7 +105,14 @@ TUPLE: instance mod-name inputs outputs ;
     pick instance-name '[ [ _ "_%s_out" sprintf append ] change-name ] map
     instance boa ;
 
-! ** Verilog module
+! ** Hardware Module
+
+! A synthesizable quotation is turned into a module object, from which target
+! HDL can be generated.
+
+! This is inspired by the way confluence generates code.  An analyzed quotation
+! is turned into a module.
+
 
 ! TODO: maybe remove tree and definition if only used for debugging
 TUPLE: module name inputs outputs variables instances definition tree ;
