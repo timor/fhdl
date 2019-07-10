@@ -154,9 +154,12 @@ M: node add-input-edges
 
 
 : tree. ( word/quot -- )
-    build-fhdl-tree
-    tree>graphviz
     [
-        "preview" png
-        "preview.png" <image-gadget> <scroller> "CDFG" open-window
-    ] with-temp-directory ;
+        build-fhdl-tree
+        tree>graphviz
+        [
+            "preview" png
+            "preview.png" <image-gadget> <scroller> "CDFG" open-window
+        ] with-temp-directory
+    ] curry with-ui
+    ;
