@@ -1,4 +1,4 @@
-USING: fhdl fhdl.combinators fhdl.tree kernel.private math sequences ;
+USING: fhdl fhdl.combinators fhdl.tree kernel.private math sequences typed ;
 
 IN: fhdl.examples
 
@@ -25,6 +25,11 @@ IN: fhdl.examples
 : ex-anon ( -- )
     test-anon-adder verilog. ;
 
+TYPED: fir8 ( x: uint8 -- y )
+    { 1 2 -2 1 } fir ;
+
+: ex-fir-verilog ( -- )
+    \ fir8 verilog. ;
 
 ! Quick way to run all examples and verify that everything still works
 : run-examples ( -- )
@@ -32,4 +37,5 @@ IN: fhdl.examples
     ex-fir-typed
     ex-adder
     ex-anon-module
-    ex-anon ;
+    ex-anon
+    ex-fir-verilog ;

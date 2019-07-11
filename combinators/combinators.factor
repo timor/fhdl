@@ -1,4 +1,5 @@
-USING: assocs fry hashtables.identity kernel math namespaces sequences words ;
+USING: assocs combinators.smart fry hashtables.identity kernel math namespaces
+sequences words ;
 
 IN: fhdl.combinators
 
@@ -41,10 +42,11 @@ PRIVATE>
 : [delay-line] ( l -- quot )
     [ drop ] <repetition> [map-reg-chain] ;
 
+! Create a quotation summing all outputs
+: [sum-outputs] ( quot -- quot )
+    dup outputs 1 - [ [ + ] append ] times ;
 
 ! Above combinator used to generate a quotation which realizes a FIR filter with
 ! constant coefficients, summing all outputs by simply applying successive adders.
 : [fir] ( coeffs -- quot )
-    [ [ [ * ] curry ] map [map-reg-chain] ]
-    [ length [ + ] <repetition> concat ] bi compose
-    ;
+    [ '[ _ * ] ] map [map-reg-chain] [sum-outputs] ;
