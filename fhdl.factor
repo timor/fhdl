@@ -46,8 +46,8 @@ PREDICATE: uint8 < fixnum [ 0 >= ] [ 256 < ] bi and ;
 
 
 ! This is used in data-level code (not the macro-expansion-level code) to define a register for
-! the value currently on top of stack.
-MACRO: >reg ( -- quot )
+! the value currently on top of stack
+MACRO: reg ( -- quot )
     [reg] ;
 
 ! Generate a register chain with parallel outputs, input is a sequence of

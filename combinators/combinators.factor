@@ -26,11 +26,11 @@ state [ IH{  } clone ] initialize
 : set-state ( seq key -- )
     state get set-at ;
 
-: reg ( x i -- x ) state get 2dup at [ set-at ] dip [ 0 ] unless* ;
+: (reg) ( x i -- x ) state get 2dup at [ set-at ] dip [ 0 ] unless* ;
 PRIVATE>
 
 : [reg] ( -- quot )
-    gensym [ reg ] curry ;
+    gensym [ (reg) ] curry ;
 
 ! This combinator takes a sequence of n quotations, and returns a quotation that
 ! generates a register chain with one input and n outputs, where the each output

@@ -14,15 +14,15 @@ IN: fhdl.tree
 
 FROM: compiler.tree => node node? ;
 FROM: namespaces => set ;
-FROM: fhdl.combinators.private => reg ;
+FROM: fhdl.combinators.private => (reg) ;
 
 ! * Special treatment of reg-pseudocall
 
 PREDICATE: reg-node < #call
-    word>> \ reg = ;
+    word>> \ (reg) = ;
 
 ! HACK the value info to copy the input info, this ensures correct value type propagation
-\ reg [ drop clone ] "outputs" set-word-prop
+\ (reg) [ drop clone ] "outputs" set-word-prop
 
 ! * Directed Graph construction
 

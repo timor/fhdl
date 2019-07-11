@@ -11,7 +11,7 @@ IN: fhdl.examples
 
 : test-registered-adder ( a b -- c )
     { fixnum fixnum } declare
-    + >reg ;
+    + reg ;
 
 : ex-adder ( -- )
     \ test-registered-adder verilog. ;
