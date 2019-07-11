@@ -1,5 +1,5 @@
-USING: assocs combinators.smart fry hashtables.identity kernel math namespaces
-sequences words ;
+USING: assocs combinators.smart fhdl fry hashtables.identity kernel locals math
+namespaces sequences stack-checker.transforms words ;
 
 IN: fhdl.combinators
 
@@ -8,12 +8,20 @@ IN: fhdl.combinators
 ! These words are used at macro-expansion time to build up quotations from
 ! smaller primitive quotations.
 
-! At the moment, the only true primitive quotation is the [reg] word, which
+! OBSOLETE At the moment, the only true primitive quotation is the [reg] word, which
 ! generates the functionality to store the current input and return a previous
 ! one.
 
 ! TODO: maybe initial value support
 
+
+! * Primitive State Handling
+
+! The primitive for synthesizing register logic is the mealy combinator, which
+! takes a quotation ( input state -- output new-state ) as input, as
+! well as an initial state, and returns a quotation ( input -- ouput ! state ).
+! This combinator should suffice to compose all necessary structures
+! involving feedback.
 
 SYMBOL: state
 state [ IH{  } clone ] initialize
@@ -29,8 +37,18 @@ state [ IH{  } clone ] initialize
 : (reg) ( x i -- x ) state get 2dup at [ set-at ] dip [ 0 ] unless* ;
 PRIVATE>
 
+! based on a state transition function and an initial state, generate a
+! quotation that implements that recurrence relation.
+! Implementation is based on lexical closure
+:: [1mealy] ( stf: ( state -- out new-state ) initial --
+              quot: ( -- out state ) )
+    initial :> state! stf '[ state @ dup state! ] ;
+
+! : [reg] ( -- quot )
+!     gensym [ (reg) ] curry ;
+
 : [reg] ( -- quot )
-    gensym [ (reg) ] curry ;
+    [ swap ] 0 [1mealy] [ drop ] compose ;
 
 ! This combinator takes a sequence of n quotations, and returns a quotation that
 ! generates a register chain with one input and n outputs, where the each output

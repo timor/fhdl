@@ -1,6 +1,6 @@
 ! Copyright (C) 2019 martinb.
 ! See http://factorcode.org/license.txt for BSD license.
-USING: fhdl.combinators fhdl.verilog kernel macros math typed ;
+USING: fhdl.combinators fhdl.verilog fhdl.verilog.operators kernel macros math typed ;
 IN: fhdl
 
 ! * Synthesizable Data Types

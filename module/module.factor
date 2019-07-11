@@ -1,6 +1,6 @@
-USING: accessors assocs compiler.tree.combinators definitions compiler.tree.def-use effects
-kernel locals namespaces quotations sequences stack-checker typed variables
-words ;
+USING: accessors assocs compiler.tree.combinators compiler.tree.def-use
+definitions effects fhdl.tree kernel locals namespaces quotations sequences
+stack-checker typed variables words ;
 
 IN: fhdl.module
 
