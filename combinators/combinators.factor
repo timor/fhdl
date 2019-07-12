@@ -29,6 +29,14 @@ state [ IH{  } clone ] initialize
 : (reg) ( x i -- x ) state get 2dup at [ set-at ] dip [ 0 ] unless* ;
 PRIVATE>
 
+! * Sequential logic
+
+! The basic sequential combinator is [1mealy], which takes an initial value in
+! addition to a state and output transfer function (stf). There is a small
+! sub-protocol operating on these stfs before they are given to the [1mealy]
+! "constructor".  This allows things like adding enable signals or synchronous
+! clears
+
 ! based on a state transition function and an initial state, generate a
 ! quotation that implements that recurrence relation.
 ! Implementation is based on lexical closure
@@ -43,6 +51,10 @@ PRIVATE>
                       stf': ( enable state -- new-state output ) )
     [| enabled state | state stf call :> ( new-state output )
      enabled { boolean } declare new-state state ? output ] ;
+
+! pre-set an enable input with t
+: always-enabled ( quot: ( ..a enable -- ..b ) -- quot: ( ..a -- ..b ) )
+    t swap curry ;
 
 ! Add a synchronous clear input to ta state transfer function when defining a
 ! mealy circuit
@@ -63,6 +75,17 @@ PRIVATE>
 ! called with enable
 :: [counter] ( n -- quot: ( -- x ) )
     [| s | s 1 + dup n > [ drop 0 ] when s ] 0 [1mealy] without-state-output ;
+
+! * Accumulator definition ( example character )
+: acc-stf ( reg-declaration -- stf )
+    '[ _ declare [ + ] keep ] ;
+
+: [acc] ( -- quot: ( x -- y ) )
+    [ [ + ] keep ] 0 [1mealy] without-state-output ;
+
+! With sync clear
+: [acc-c] ( reg-declaration reset-val -- quot: ( x enable? -- y ) )
+    [ acc-stf ] dip with-sync-clear 0 [1mealy] without-state-output ;
 
 ! Return an accumulator quotation, initialized by 0, with reset signal.  Needs a
 ! type declaration as input which specifies the register datatype
