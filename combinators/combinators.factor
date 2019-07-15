@@ -87,11 +87,11 @@ PRIVATE>
 : [acc-c] ( reg-declaration reset-val -- quot: ( x enable? -- y ) )
     [ acc-stf ] dip with-sync-clear 0 [1mealy] without-state-output ;
 
-! Return an accumulator quotation, initialized by 0, with reset signal.  Needs a
-! type declaration as input which specifies the register datatype
-: [accumulator] ( declaration -- quot )
-    '[ _ declare swap [ + ] keep ] 0 [1mealy] without-state-output ;
+! With load enable
+: [acc-e] ( reg-declaration -- quot: ( x enable? -- y ) )
+    acc-stf with-load-enable 0 [1mealy] without-state-output ;
 
+! * DSP Structures
 ! This combinator takes a sequence of n quotations, and returns a quotation that
 ! generates a register chain with one input and n outputs, where the each output
 ! is passed through the respective quotation of the input sequence.
