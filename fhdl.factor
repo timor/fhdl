@@ -62,6 +62,9 @@ MACRO: fir ( coeffs -- quot )
     [fir] ;
 
 
+MACRO: counter ( n -- quot )
+    [counter] ;
+
 ! * Generating Verilog Code
 
 ! Print a verilog implementation of the word or quotation to standard output.
