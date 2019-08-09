@@ -27,5 +27,5 @@ M: binary-op-node node>verilog
     [ in-d>> [ value-name ] map first2 ]
     [ word>> verilog-operator ] tri
     binary-expression
-    assign-net print
+    implicit-assignment print
     ;

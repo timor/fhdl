@@ -21,12 +21,16 @@ M: boolean literal>verilog "1" "0" ? ;
 : var-decl ( name interval type -- str )
     -rot ranged-var "%s %s;" sprintf ;
 
-! Generate identifiers from stack effects
+! TODO probably unused
 : assign-reg ( lhs-name rhs-name -- str )
     "%s <= %s;" sprintf ;
 
+! FIXME rename to explicit-assignment
 : assign-net ( lhs-name rhs-name -- str )
     "assign %s = %s;" sprintf ;
+
+: implicit-assignment ( lhs-name rhs -- str )
+    "wire %s = %s;" sprintf ;
 
 : binary-expression ( v1 v2 op -- str )
     swap "(%s %s %s)" sprintf ;

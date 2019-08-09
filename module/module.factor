@@ -15,10 +15,12 @@ IN: fhdl.module
 TUPLE: module
     { name initial: "anon" }
     effect
-    variables ;
+    variables
+    registers                   ! derived from local variables
+    ;
 
 : <module> ( effect -- module )
-    module new swap >>effect H{ } clone >>variables ;
+    module new swap >>effect H{ } clone >>variables IH{ } clone >>registers ;
 
 SYMBOL: current-module
 : mod ( -- module ) current-module get ;
@@ -35,6 +37,11 @@ TUPLE: var value info name ;
     value <var> info >>info
     prefix value "%s_%d" sprintf >>name ;
 
+TUPLE: register slot-box reader-name writer-name ;
+: <register> ( slot-box -- register )
+    dup identity-hashcode [ "reg_%d" sprintf ] [ "next_%d" sprintf ] bi
+    register boa ;
+
 <PRIVATE
 
 ! Augment a quotation on values with info on top of stack
@@ -46,8 +53,9 @@ TUPLE: var value info name ;
 : add-var ( var -- ) dup value>> mod variables>> set-at ;
 
 ! TODO: err if written to twice
-: set-var-info ( var info -- ) swap get-var info<< ;
+: set-var-info ( value info -- ) swap get-var info<< ;
 
+: get-register ( slot-box -- register ) mod registers>> [ <register> ] cache ;
 
 PRIVATE>
 : effect-ports ( effect -- ins outs )
@@ -71,6 +79,9 @@ PRIVATE>
 ! Called on nodes which create new value>variable mappings
 ! Need to update the current module variables
 ! Return a list of var objects
+! TODO: the naming is actually not correct, since this does not define
+! variables, but rather value-to-variable mappings
+
 GENERIC: define-variables* ( node -- )
 M: node define-variables* drop ;
 GENERIC: add-var-infos* ( node -- )
@@ -81,6 +92,9 @@ UNION: var-consumer #call #return ;
 
 M: var-definer define-variables*
     out-d>> [ <var> add-var ] each ;
+
+! FIXME: this code duplication should be caught in dispatch
+M: local-reader-node define-variables* out-d>> first <var> add-var ;
 
 M: #introduce define-variables*
     out-d>>
@@ -95,9 +109,38 @@ M: #return define-variables*
 M: #renaming define-variables*
     inputs/outputs [ [ get-var ] dip mod variables>> set-at ] 2each ;
 
+! When a local variable is set, this is interpreted as an assignment to the
+! variable representing the next value
+! M: local-writer-node define-variables*
+
+! When a local variable is read, this is interpreted as a register read.  Thus
+! the value output by the local reader node needs to be set to the register
+! output variable
+! M: local-reader-node define-variables*
+!     [ out-d>> first ]
+!     [ dup in-d>> first node-value-info literal>> get-register reader-name>> ] bi
+!     set-var-name ;
+
 M: var-consumer add-var-infos*
     [ in-d>> ] [ node-input-infos ] bi
     [ set-var-info ] 2each ;
+
+! Producer, sets the name of the output value based on the register information
+! FIXME: deduplicate with after method on var-consumer
+M: local-reader-node add-var-infos*
+    [ [ in-d>> ] [ node-input-infos ] bi
+      [ set-var-info ] 2each ] keep
+    [ out-d>> first ] [ node-local-box get-register reader-name>> ] bi
+    set-var-name ;
+
+
+! Consumer, needs to set info and name
+! FIXME: deduplicate with after method on var-consumer
+M: local-writer-node add-var-infos*
+    [ [ in-d>> ] [ node-input-infos ] bi
+    [ set-var-info ] 2each ] keep
+    [ in-d>> first ] [ node-local-box get-register writer-name>> ] bi set-var-name
+    ;
 
 M: #if add-var-infos*
     in-d>> first boolean <class-info> set-var-info ;
