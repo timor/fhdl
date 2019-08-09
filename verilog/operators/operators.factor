@@ -1,6 +1,6 @@
 USING: accessors assocs compiler.tree fhdl.module fhdl.verilog
-fhdl.verilog.private formatting io kernel math.partial-dispatch math.private
-sequences sets ;
+fhdl.verilog.private fhdl.verilog.syntax formatting io kernel
+math.partial-dispatch math.private sequences sets ;
 
 IN: fhdl.verilog.operators
 
@@ -23,9 +23,9 @@ CONSTANT: binary-ops {
 PREDICATE: binary-op-node < #call word>> binary-op-word? ;
 
 M: binary-op-node node>verilog
-    define-output-nets
     [ out-d>> first value-name ]
     [ in-d>> [ value-name ] map first2 ]
     [ word>> verilog-operator ] tri
-    swap "%s %s %s" sprintf net-assignment print
+    binary-expression
+    assign-net print
     ;

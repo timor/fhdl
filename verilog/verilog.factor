@@ -1,8 +1,10 @@
-USING: accessors combinators compiler.tree compiler.tree.def-use.simplified
-compiler.tree.propagation.info fhdl.module fhdl.tree formatting io kernel math
-math.intervals math.parser sequences shuffle variables ;
+USING: accessors compiler.tree compiler.tree.def-use.simplified fhdl.module
+fhdl.tree.locals-propagation fhdl.verilog.syntax formatting io kernel
+math.intervals prettyprint sequences variables ;
 
 IN: fhdl.verilog
+
+FROM: fhdl.module => mod ;
 
 ! * Clocks and resets
 
@@ -18,138 +20,87 @@ GLOBAL: reset-name
 
 <PRIVATE
 
-: make-verilog-var ( value -- str )
-    "v_%d" sprintf ;
-
-ERROR: unconstrained-value value ;
-
-: value-verilog-range ( value -- str )
-    dup value-info interval>>
-    {
-        { full-interval [ unconstrained-value ] }
-        { empty-interval [ unconstrained-value ] }
-        [ nip interval-length log2 1 + "[%s:0]" sprintf ]
-    } case ;
-
 : var-definition ( value type -- str )
-    swap [ value-verilog-range ] [ value-name ] bi
-    "%s %s %s;" sprintf ;
+    [ [ value-name ] [ value-range ] bi ] dip
+    var-decl ;
 
-! TODO inline
 : wire-definition ( value -- str )
     "wire" var-definition ;
-
-! Generate identifiers from stack effects
-: effect-ports ( effect -- ins outs )
-    [ in>> ] [ out>> ] bi
-    "i" "o"
-    [ swap [ "%s_%s_%d" sprintf ] with map-index ] bi-curry@ bi* ;
-
-: define-output-nets ( node -- node )
-    dup out-d>>
-    [ dup make-verilog-var set-value-name ] each
-    dup out-d>> [ wire-definition print nl ] each
-    ;
-
-: reg-var-assignment ( reg-name source-name -- str )
-    "%s <= %s;" sprintf ;
-
-: wrap-begin-block ( str -- str )
-    "begin\n" "\nend" surround ;
-
-: if-else-statement ( cond then else -- str )
-    [ "if(%s)\n" sprintf ] [ " " prepend ] [ "\nelse\n " prepend ] tri*
-    append append ;
-
-: reg-always-block ( source-val-name reg-val-name clock reset -- str )
-    [ "always @(posedge %s or posedge %s) " sprintf ] keep
-    "%s == 1'b1" sprintf
-    2swap [ nip 0 reg-var-assignment ] [ swap reg-var-assignment ] 2bi
-    if-else-statement
-    wrap-begin-block append ;
 
 
 PRIVATE>
 
-: net-assignment ( lhs-value rhs -- str )
-    "assign %s = %s;" sprintf ;
-
 ! * Verilog Code Generation from SSA Tree Node
+
 
 ! This is called for each node, and expected to print verilog code to stdout
 GENERIC: node>verilog ( node -- )
 
-! TODO: rewrite with combinators
-M: #introduce node>verilog
-    module-name
-    module-effect effect-ports append
-    reset-name prefix clock-name prefix
-    ", " join
-    "module \\%s (%s);" printf nl
-    clock-name "input %s;" printf nl
-    reset-name "input %s;" printf nl
 
-    out-d>>
-    module-effect effect-ports drop
-    [
-        [ set-value-name ] keepd
+M: #introduce node>verilog
+    mod [ name>> ] [ effect>> effect-ports append ] bi
+    reset-name prefix clock-name prefix
+    begin-module print
+    clock-name empty-interval "input" var-decl print
+    reset-name empty-interval "input" var-decl print
+
+    out-d>> [
         "input" var-definition print
-    ] 2each
+    ] each
     ;
 
 M: #call node>verilog
-    define-output-nets
+    dup out-d>> [
+        "wire" var-definition print
+    ] each
 
-    [ identity-hashcode "inst_%d" sprintf ]
+    out-d>>
     [ word>> name>> ]
+    [ identity-hashcode "inst_%d" sprintf ]
     [ in-d>> [ value-name ] map ", " join ] tri
-    "%s \\%s (%s);" printf nl ;
+    instance print ;
 
+! Converts set-local-value calls: ( value box -- )
+M: local-writer-node node>verilog
+    "writer:" print . ;
 
-M: reg-node node>verilog
-    [ out-d>> first ] [ in-d>> first ] bi
-    over [ dup make-verilog-var set-value-name ] [ "reg" var-definition print ] bi
-    swap [ value-name ] bi@ clock-name reset-name reg-always-block print
-
-    ! [ out-d>> first dup <reg> ]
-    ! [ in-d>> first defining-variable name>> ] 2bi
-    ! over name>> swap "%s <= %s" sprintf >>assignment
-    ! add-var
+M: local-reader-node node>verilog
+    "reader:" print
+    out-d>> first value-name print
     ;
 
-<PRIVATE
-GENERIC: literal>verilog ( literal -- str )
-M: number literal>verilog number>string ;
-M: boolean literal>verilog "1" "0" ? ;
+! M: reg-node node>verilog
+!     [ out-d>> first ] [ in-d>> first ] bi
+!     over [ dup make-verilog-var set-value-name ] [ "reg" var-definition print ] bi
+!     swap [ value-name ] bi@ clock-name reset-name reg-always-block print
 
+!     ! [ out-d>> first dup <reg> ]
+!     ! [ in-d>> first defining-variable name>> ] 2bi
+!     ! over name>> swap "%s <= %s" sprintf >>assignment
+!     ! add-var
+!     ;
+
+<PRIVATE
 : reg-push-node? ( node -- ? )
-    out-d>> first actually-used-by first node>> reg-node? ;
+    out-d>> first actually-used-by first node>>
+    [ local-writer-node? ] [ local-reader-node? ] bi or ;
 PRIVATE>
 
 M: #push node>verilog
     dup reg-push-node?
     [ drop ] [
-        [ out-d>> first ] [ literal>> literal>verilog ] bi set-value-name
+        out-d>> dup literal>> literal>verilog set-var-name
     ] if ;
 
-M: #renaming node>verilog
-    inputs/outputs swap [ value-name set-value-name ] 2each ;
-
-<PRIVATE
-! FIXME: this duplicated code from net-assignment and var-definiton. If either of those
-! change, a better abstraction is probably needed.
-: output-port-decl-def ( port value -- str )
-    [ value-verilog-range swap "output %s %s;" sprintf ]
-    [ value-name " assign %s = %s;" sprintf ] 2bi append ;
-PRIVATE>
-
+! Note that the assignment of the output is actually done by whatever produces
+! the value, e.g. a call or a registered assignment
 M: #return node>verilog
-    in-d>>
-    module-effect effect-ports nip
-    [ swap output-port-decl-def print ] 2each
-    "endmodule" print ;
+    in-d>> [ "output" var-definition print ] each
+    end-module print ;
+
 
 M: #declare node>verilog drop ;
+M: #renaming node>verilog drop ;
 
 ! * Converting a Word or Quotation into Verilog code
 

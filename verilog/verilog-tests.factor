@@ -1,6 +1,6 @@
 ! Copyright (C) 2019 martinb.
 ! See http://factorcode.org/license.txt for BSD license.
-USING: fhdl.verilog fhdl.verilog.private math stack-checker tools.test ;
+USING: fhdl.module math stack-checker tools.test ;
 IN: fhdl.verilog.tests
 
 {
