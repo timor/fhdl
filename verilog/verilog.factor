@@ -60,25 +60,27 @@ M: #call node>verilog
     [ in-d>> [ value-name ] map ", " join ] tri
     instance print ;
 
+! TODO: actually use guard, or drop that mechanism in favor of reg statements
+! generated from module var list
 ! local writer nodes don't have 1-to-1 equivalent verilog statements.
 ! Assignment is done producer nodes, not consumer nodes.  Thus, these are used
 ! to generate the code which actually sets the variable.  Since there can be
 ! more than one local writer node for one local variable, we must make sure that
 ! the code is generated only once.
-M: local-writer-node node>verilog
-    node-local-box mod registers>> at
-    dup visited-regs member?
-    [ drop ]
-    [
-        dup visited-regs adjoin
-        [ writer-name>> ] [ reader-name>> ] bi clock-name reset-name
-        reg-always-block print
-    ] if ;
+! M: local-writer-node node>verilog
+!     dup node-local-box mod registers>> at
+!     [ drop ]
+!     [
+!         ! dup visited-regs adjoin
+!         [ setter-name>> ] [ name>> ] bi clock-name reset-name
+!         reg-always-block print
+!     ] if ;
 
-! local reader nodes are producer nodes, so they need to assign their results
-M: local-reader-node node>verilog
-    [ out-d>> first value-name ]
-    [ node-local-box mod registers>> at reader-name>> ] bi
+M: local-reader-node node>verilog drop ;
+
+M: local-writer-node node>verilog
+    [ get-register-create setter-name>> ]
+    [ in-d>> first value-name ] bi
     assign-net print ;
 
 ! FIXME: this should be handled on module level, not verilog code generation
@@ -91,7 +93,8 @@ PRIVATE>
 M: #push node>verilog
     dup reg-push-node?
     [ drop ] [
-        out-d>> dup literal>> literal>verilog set-var-name
+        out-d>> first [ value-name ] [ get-var info>> literal>> ] bi
+        parameter-definition print
     ] if ;
 
 ! Note that the assignment of the output is actually done by whatever produces

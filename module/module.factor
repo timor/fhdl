@@ -1,7 +1,7 @@
 USING: accessors assocs compiler.tree compiler.tree.combinators
 compiler.tree.def-use compiler.tree.propagation.info definitions effects
-fhdl.tree formatting fry kernel locals namespaces quotations sequences
-stack-checker typed variables words ;
+fhdl.tree fhdl.tree.locals-propagation formatting fry hashtables.identity kernel
+locals namespaces prettyprint quotations sequences stack-checker typed words ;
 
 IN: fhdl.module
 
@@ -16,7 +16,7 @@ TUPLE: module
     { name initial: "anon" }
     effect
     variables
-    registers                   ! derived from local variables
+    registers                   ! associates local boxes with variables
     ;
 
 : <module> ( effect -- module )
@@ -32,15 +32,34 @@ SYMBOL: current-module
 TUPLE: var value info name ;
 : <var> ( value -- var )
     var new swap >>value ;
+TUPLE: input < var ;
+TUPLE: output < var ;
+TUPLE: wire < var ;
+TUPLE: register < var setter-name ;
+TUPLE: parameter < var literal ;
+: <register> ( local-box -- var )
+    register new swap
+    identity-hashcode
+    [ "reg_%d" sprintf >>name ]
+    [ "next_%d" sprintf >>setter-name ] bi
+    ;
 
 :: <named-var> ( value info prefix -- var )
     value <var> info >>info
     prefix value "%s_%d" sprintf >>name ;
 
-TUPLE: register slot-box reader-name writer-name ;
-: <register> ( slot-box -- register )
-    dup identity-hashcode [ "reg_%d" sprintf ] [ "next_%d" sprintf ] bi
-    register boa ;
+! TUPLE: register slot-box reader-var writer-var ;
+! : <register> ( node -- register )
+!     register new swap node-local-box >>slot-box ;
+
+! Given a value, return the variable which is associated with that value in the
+! current module.
+: get-var ( value -- var ) mod variables>> at ;
+
+! create a register variable, also define the name of the setter and reader
+! based on the box hashcode
+: get-register-create ( node -- reg )
+    node-local-box mod registers>> [ <register> ] cache ;
 
 <PRIVATE
 
@@ -48,16 +67,22 @@ TUPLE: register slot-box reader-name writer-name ;
 : with-value-info ( node obj quot: ( ..a value -- ..b ) -- obj quot: ( ..a value info -- ..b ) )
     '[ [ node-value-info ] keep swap @ ] with ;
 
-: get-var ( value -- var ) mod variables>> [ <var> ] cache ;
+! TODO obsolete, replace with add-new-var
+: add-var-old ( var -- ) dup value>> mod variables>> set-at ;
 
-: add-var ( var -- ) dup value>> mod variables>> set-at ;
+:: get-var-create ( value class -- var )
+    value mod variables>> [ drop class new ] cache ;
+    ! new swap [ mod variables>> set-at ] keepd ;
+
+: add-var ( value class -- ) get-var-create drop ;
 
 ! TODO: err if written to twice
 : set-var-info ( value info -- ) swap get-var info<< ;
 
-: get-register ( slot-box -- register ) mod registers>> [ <register> ] cache ;
+ ! : get-register ( slot-box -- register ) mod registers>> [ <register> ] cache ;
 
 PRIVATE>
+
 : effect-ports ( effect -- ins outs )
     [ in>> ] [ out>> ] bi
     "i" "o"
@@ -87,24 +112,29 @@ M: node define-variables* drop ;
 GENERIC: add-var-infos* ( node -- )
 M: node add-var-infos* drop ;
 
+! These nodes define new wires
 UNION: var-definer #call #push ;
+! These nodes have value info
 UNION: var-consumer #call #return ;
 
-M: var-definer define-variables*
-    out-d>> [ <var> add-var ] each ;
+M: #call define-variables* out-d>> [ wire add-var ] each ;
+
+M: #push define-variables* out-d>> first parameter add-var ;
 
 ! FIXME: this code duplication should be caught in dispatch
-M: local-reader-node define-variables* out-d>> first <var> add-var ;
+M: local-reader-node define-variables* ( node -- )
+    [ get-register-create ]
+    [ out-d>> first ] bi mod variables>> set-at ;
 
 M: #introduce define-variables*
-    out-d>>
+    out-d>> [ input get-var-create ] map
     mod effect>> effect-inputs
-    [ set-var-name ] 2each ;
+    [ swap name<< ] 2each ;
 
 M: #return define-variables*
-    in-d>>
+    in-d>> [ output get-var-create ] map
     mod effect>> effect-outputs
-    [ set-var-name ] 2each ;
+    [ swap name<< ] 2each ;
 
 M: #renaming define-variables*
     inputs/outputs [ [ get-var ] dip mod variables>> set-at ] 2each ;
@@ -130,17 +160,19 @@ M: var-consumer add-var-infos*
 M: local-reader-node add-var-infos*
     [ [ in-d>> ] [ node-input-infos ] bi
       [ set-var-info ] 2each ] keep
-    [ out-d>> first ] [ node-local-box get-register reader-name>> ] bi
-    set-var-name ;
+    [ get-register-create ] [ out-d>> first ] bi
+    mod variables>> set-at ;
 
 
-! Consumer, needs to set info and name
+! Consumer, but defines its input to be the setter var for the register
 ! FIXME: deduplicate with after method on var-consumer
-M: local-writer-node add-var-infos*
-    [ [ in-d>> ] [ node-input-infos ] bi
-    [ set-var-info ] 2each ] keep
-    [ in-d>> first ] [ node-local-box get-register writer-name>> ] bi set-var-name
-    ;
+! M: local-writer-node add-var-infos*
+!     dup [ get-register-create setter-name>> ] [ in-d>> first ] bi
+!     set-var-info
+!     ! set dummy input to make check-module happy:
+!     [ in-d>> second ] [ node-input-infos second ] bi
+!     set-var-info
+!     ;
 
 M: #if add-var-infos*
     in-d>> first boolean <class-info> set-var-info ;
@@ -167,7 +199,7 @@ ERROR: no-var-info var ;
         effect <module> name >>name current-module set-global
         tree compute-def-use
         dup [ [ define-variables* ] [ add-var-infos* ] bi ] each-node
-        mod check-module
+        ! mod check-module
         [ quot call( node -- ) ] each-node
     ] with-scope ;
 
@@ -191,6 +223,7 @@ M: typed-word get-module-def "typed-word" word-prop get-module-def ;
 PRIVATE>
 
 ! main interface
+! FIXME: not main interface anymore
 : each-node-in-module ( quot/word quot -- )
     [
         [ get-module-name ] [ get-module-effect ] [ get-module-def ] tri
@@ -198,3 +231,7 @@ PRIVATE>
         ! dup ...
     ] dip (each-node-in-module)
     ;
+
+! Convert quotation or word into an fhdl module.
+: fhdl-module ( quot/word -- module )
+    [ drop ] each-node-in-module mod ;

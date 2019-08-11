@@ -29,6 +29,9 @@ M: boolean literal>verilog "1" "0" ? ;
 : assign-net ( lhs-name rhs-name -- str )
     "assign %s = %s;" sprintf ;
 
+: parameter-definition ( lhs-name value -- str )
+    "parameter %s = %d;" sprintf ;
+
 : implicit-assignment ( lhs-name rhs -- str )
     "wire %s = %s;" sprintf ;
 
