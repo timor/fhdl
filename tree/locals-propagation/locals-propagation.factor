@@ -200,7 +200,6 @@ ERROR: local-value-infos-not-converging ;
     [ local-infos-fixpoint? ]
     [
         unconstrain-local-infos
-        over .
         over 0 <= [ local-value-infos-not-converging ] when
         optimize-locals-run [ 1 - ] dip
     ]
