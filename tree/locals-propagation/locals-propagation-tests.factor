@@ -57,6 +57,3 @@ IN: fhdl.tree.locals-propagation.tests
 
 ! should result in rippling through full interval
 { t } [ 3reg-quot-untyped build-test-tree optimize-locals drop local-infos-fixpoint? ] unit-test
-
-! should result in diverging error
-[ diverging-acc build-test-tree optimize-locals drop ] must-fail

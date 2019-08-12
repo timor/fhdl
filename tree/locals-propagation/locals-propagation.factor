@@ -168,12 +168,29 @@ M: local-reader-node node-local-box
     ;
 
 ! This is needed to ensure that local value information propagation has converged.
+: local-info-entry-converges? ( seq -- ? )
+    last2 swap value-info<= ;
+
 : local-infos-fixpoint? ( -- ? )
     local-infos get values
-    [ last2 swap value-info<= ] all?
+    [ local-info-entry-converges? ] all?
     ;
 
 ERROR: local-value-infos-not-converging ;
+
+! This re-initializes the local value infos so that the variables that diverge
+! will start with the full intervall.  The other info records are initialized like previously
+: unconstrain-local-infos ( -- )
+    local-infos [
+        [
+            dup local-info-entry-converges?
+            [
+                first
+            ] [
+                last clone full-interval >>interval
+            ] if 1vector
+        ] assoc-map
+    ] change ;
 
 ! This is is the top-level function that should be inserted as a pass during
 ! frontend compilation.
@@ -183,6 +200,7 @@ ERROR: local-value-infos-not-converging ;
     local-infos get assoc-size swap
     [ local-infos-fixpoint? ]
     [
+        unconstrain-local-infos
         over .
         over 0 <= [ local-value-infos-not-converging ] when
         optimize-locals-run [ 1 - ] dip
