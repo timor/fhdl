@@ -59,7 +59,7 @@ M: #call node-name
     word>> name>> ;
 
 M: #push node-name
-    literal>> "%u" sprintf "'" dup surround ;
+    literal>> dup identity-hashcode "'%u'(%x)" sprintf ;
 
 <PRIVATE
 : intervall-length>str ( x -- x )
