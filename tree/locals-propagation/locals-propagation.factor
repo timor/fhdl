@@ -178,16 +178,6 @@ M: local-reader-node node-local-box
 
 ! #+end_src
 
-!  Info is a union type on all set locations including literal at call site
-! #+begin_src factor
-: (local-value-info) ( box -- info' )
-    [ local-infos get at ] [ first clone <literal-info> ] bi
-    prefix
-    dup ...
-    value-infos-union
-    dup ...
-    ;
-
 \ local-value [
     literal>> local-infos get at
     [ last clone ] [ object-info ] if*
