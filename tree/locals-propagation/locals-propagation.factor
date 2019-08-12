@@ -168,7 +168,15 @@ M: local-reader-node node-local-box
     init-local-infos
     local-infos get assoc-size 1 + [ propagate-locals-step ] times
     ;
- ! #+end_src
+
+
+! This is needed to ensure that local value information propagation has converged.
+: local-infos-fixpoint? ( -- ? )
+    local-infos get values
+    [ last2 swap value-info<= ] all?
+    ;
+
+! #+end_src
 
 !  Info is a union type on all set locations including literal at call site
 ! #+begin_src factor
