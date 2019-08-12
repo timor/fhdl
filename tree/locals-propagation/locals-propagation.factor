@@ -113,7 +113,7 @@ IN: fhdl.tree.locals-propagation
 !       monotonically for each iteration, repeat from step 2
 
 
-!  #+begin_src factor
+! #+begin_src factor
 PREDICATE: local-writer-node < #call word>> \ set-local-value = ;
 PREDICATE: local-reader-node < #call word>> \ local-value = ;
 PREDICATE: regular-call < #call [ local-writer-node? ] [ local-reader-node? ] bi@ or not ;
@@ -159,10 +159,9 @@ M: local-reader-node node-local-box
         [ drop ] if
     ] each-node
     ;
+! #+end_src
 
-!  #+end_src
-
-!  #+begin_src factor
+! #+begin_src factor
 : optimize-locals-run ( nodes -- nodes )
     local-infos get assoc-size 1 + [ propagate-locals-step ] times
     ;
@@ -208,18 +207,14 @@ ERROR: local-value-infos-not-converging ;
     until nip
     ;
 
-! #+end_src
-
 \ local-value [
     literal>> local-infos get at
     [ last clone ] [ object-info ] if*
 ] "outputs" set-word-prop
-!  #+end_src
 
 
-!  Hack inlining so loading this triggers the new behavior, this should obviously
-!  be removed and local-value and set-local-value defined non-inline properly
+! Hack inlining so loading this triggers the new behavior, this should obviously
+! be removed and local-value and set-local-value defined non-inline properly
 
-!  #+begin_src factor
 { set-local-value local-value } [ f "inline" set-word-prop ] each
-!  #+end_src
+! #+end_src
