@@ -1,6 +1,6 @@
 USING: accessors assocs compiler.tree compiler.tree.combinators
 compiler.tree.propagation compiler.tree.propagation.info hashtables.identity
-kernel locals.backend namespaces prettyprint sequences words ;
+kernel locals.backend namespaces prettyprint sequences vectors words ;
 
 IN: fhdl.tree.locals-propagation
 
@@ -123,36 +123,57 @@ SYMBOL: local-infos
 SYMBOL: track-local-infos
 : track-local-infos? ( -- ? ) track-local-infos get ;
 
-GENERIC: compute-box-info* ( node -- )
-
-M: object compute-box-info* drop ;
-M: local-writer-node compute-box-info*
-    node-input-infos first2 literal>>
-    local-infos get push-at ;
-
 GENERIC: node-local-box ( node -- box )
 M: local-writer-node node-local-box
     node-input-infos second literal>> ;
 M: local-reader-node node-local-box
     node-input-infos first literal>> ;
+
+: init-local-infos ( nodes -- nodes )
+    IH{ } clone local-infos set
+    dup
+    [
+        dup local-reader-node?
+        [ node-local-box local-infos get [ first clone <literal-info> 1vector ] cache drop ]
+        [ drop ] if
+    ] each-node ;
+
+: current-local-info ( box -- info )
+    local-infos get at last ;
+
+! Update the local info record with new info
+: update-local-info ( box info -- )
+    dup ...
+    over current-local-info value-info-union
+    dup ...
+    swap local-infos get push-at ;
+
+! Perform one iteration, do after initializing local infos
+: propagate-locals-step ( nodes -- nodes )
+    propagate
+    dup
+    [
+        dup local-writer-node?
+        [
+            [ node-local-box ] [ node-input-infos first ] bi
+            update-local-info
+        ]
+        [ drop ] if
+    ] each-node
+    ;
+
 !  #+end_src
 
 !  This pass must run between two propagation passes
 !  #+begin_src factor
-: compute-local-boxes ( nodes -- nodes )
-    "compute local boxes" print
-    dup
-    [ compute-box-info* ] each-node ;
-
 : optimize-locals ( nodes -- nodes )
-    IH{ } clone local-infos set
-    compute-local-boxes
-    local-infos get assoc-empty?
-    [ propagate ] unless ;
-!  #+end_src
+    init-local-infos
+    local-infos get assoc-size 1 + [ propagate-locals-step ] times
+    ;
+ ! #+end_src
 
 !  Info is a union type on all set locations including literal at call site
- #+begin_src factor
+! #+begin_src factor
 : (local-value-info) ( box -- info' )
     [ local-infos get at ] [ first clone <literal-info> ] bi
     prefix
@@ -162,9 +183,8 @@ M: local-reader-node node-local-box
     ;
 
 \ local-value [
-    track-local-infos? [
-        literal>> (local-value-info)
-    ] [ drop object-info ] if
+    literal>> local-infos get at
+    [ last clone ] [ object-info ] if*
 ] "outputs" set-word-prop
 !  #+end_src
 
