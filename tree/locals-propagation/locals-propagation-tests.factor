@@ -67,3 +67,13 @@ IN: fhdl.tree.locals-propagation.tests
 { t } [ diverging-acc build-test-tree optimize-locals drop local-infos-fixpoint? ] unit-test
 
 { t } [ constrained-acc build-test-tree optimize-locals drop local-infos-fixpoint? ] unit-test
+
+! Testing write-before-read
+
+: wbr-quot ( -- quot )
+    [let
+     0 :> a!
+     [ { fixnum } declare a! 1 a + ]
+    ] ;
+
+{ t } [ wbr-quot build-test-tree init-local-infos optimize-locals-run drop local-infos-fixpoint? ] unit-test
