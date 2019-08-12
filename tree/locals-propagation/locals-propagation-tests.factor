@@ -28,6 +28,12 @@ IN: fhdl.tree.locals-propagation.tests
      [ { fixnum } declare a [ + a! ] keep ]
     ] ;
 
+: constrained-acc ( -- quot )
+    [let
+     -1 :> a!
+     [ { fixnum } declare a [ + { fixnum } declare a! ] keep ]
+    ] ;
+
 : build-test-tree ( quot -- tree ) build-tree analyze-recursive normalize propagate cleanup-tree ;
 
 : see-locals ( tree -- tree )
@@ -57,3 +63,7 @@ IN: fhdl.tree.locals-propagation.tests
 
 ! should result in rippling through full interval
 { t } [ 3reg-quot-untyped build-test-tree optimize-locals drop local-infos-fixpoint? ] unit-test
+
+{ t } [ diverging-acc build-test-tree optimize-locals drop local-infos-fixpoint? ] unit-test
+
+{ t } [ constrained-acc build-test-tree optimize-locals drop local-infos-fixpoint? ] unit-test
