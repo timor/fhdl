@@ -120,9 +120,6 @@ PREDICATE: regular-call < #call [ local-writer-node? ] [ local-reader-node? ] bi
 
 SYMBOL: local-infos
 
-SYMBOL: track-local-infos
-: track-local-infos? ( -- ? ) track-local-infos get ;
-
 GENERIC: node-local-box ( node -- box )
 M: local-writer-node node-local-box
     node-input-infos second literal>> ;

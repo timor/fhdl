@@ -120,7 +120,6 @@ M: node add-input-edges
 
 ! TODO better name
 : fhdl-optimize ( nodes  -- nodes )
-    track-local-infos on
     analyze-recursive normalize propagate
     optimize-locals
     cleanup-tree dup
@@ -129,7 +128,6 @@ M: node add-input-edges
     apply-identities compute-def-use remove-dead-code ?check
     compute-def-use
     optimize-modular-arithmetic
-    track-local-infos off
     ! TODO reintroduce if no necessary info is lost
     ! finalize
     ;
