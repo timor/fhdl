@@ -143,9 +143,7 @@ M: local-reader-node node-local-box
 
 ! Update the local info record with new info
 : update-local-info ( box info -- )
-    dup ...
     over current-local-info value-info-union
-    dup ...
     swap local-infos get push-at ;
 
 ! Perform one iteration, do after initializing local infos
