@@ -162,18 +162,32 @@ M: local-reader-node node-local-box
 
 !  #+end_src
 
-!  This pass must run between two propagation passes
 !  #+begin_src factor
-: optimize-locals ( nodes -- nodes )
-    init-local-infos
+: optimize-locals-run ( nodes -- nodes )
     local-infos get assoc-size 1 + [ propagate-locals-step ] times
     ;
-
 
 ! This is needed to ensure that local value information propagation has converged.
 : local-infos-fixpoint? ( -- ? )
     local-infos get values
     [ last2 swap value-info<= ] all?
+    ;
+
+ERROR: local-value-infos-not-converging ;
+
+! This is is the top-level function that should be inserted as a pass during
+! frontend compilation.
+: optimize-locals ( nodes -- nodes )
+    init-local-infos
+    optimize-locals-run
+    local-infos get assoc-size swap
+    [ local-infos-fixpoint? ]
+    [
+        over .
+        over 0 <= [ local-value-infos-not-converging ] when
+        optimize-locals-run [ 1 - ] dip
+    ]
+    until nip
     ;
 
 ! #+end_src
