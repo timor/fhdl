@@ -1,7 +1,8 @@
 USING: accessors assocs compiler.tree compiler.tree.combinators
-compiler.tree.def-use compiler.tree.propagation.info definitions effects
-fhdl.tree fhdl.tree.locals-propagation formatting fry hashtables.identity kernel
-locals namespaces prettyprint quotations sequences stack-checker typed words ;
+compiler.tree.def-use compiler.tree.def-use.simplified
+compiler.tree.propagation.info definitions effects fhdl.tree
+fhdl.tree.locals-propagation formatting fry hashtables.identity kernel locals
+namespaces prettyprint quotations sequences stack-checker typed words ;
 
 IN: fhdl.module
 
@@ -16,11 +17,17 @@ TUPLE: module
     { name initial: "anon" }
     effect
     variables
-    registers                   ! associates local boxes with variables
+    registers           ! associates local boxes with variables
+    nodes               ! All nodes which must be considered for code generation
     ;
 
-: <module> ( effect -- module )
-    module new swap >>effect H{ } clone >>variables IH{ } clone >>registers ;
+: <module> ( name effect -- module )
+    module new swap >>effect
+    swap  >>name
+    H{ } clone >>variables
+    IH{ } clone >>registers
+    V{ } clone >>nodes
+    ;
 
 SYMBOL: current-module
 : mod ( -- module ) current-module get ;
@@ -101,11 +108,31 @@ PRIVATE>
 : value-range ( value -- interval )
     mod variables>> at info>> interval>> ;
 
+
+! Called on each node to determine whether the node should be added to the list
+! of code-generation nodes.
+
+GENERIC: code-node? ( node -- ? )
+M: node code-node? drop f ;
+M: #call code-node? drop t ;
+M: local-reader-node code-node? drop f ;
+
+<PRIVATE
+: reg-push-node? ( node -- ? )
+    out-d>> first actually-used-by first node>>
+    [ local-writer-node? ] [ local-reader-node? ] bi or ;
+PRIVATE>
+
+M: #push code-node? reg-push-node? not ;
+M: #if code-node? drop t ;
+
 ! Called on nodes which create new value>variable mappings
 ! Need to update the current module variables
 ! Return a list of var objects
 ! TODO: the naming is actually not correct, since this does not define
 ! variables, but rather value-to-variable mappings
+! TODO: define-variables* and add-var-infos* should probably be merged, since
+! they are called after each other for each node anyways...
 
 GENERIC: define-variables* ( node -- )
 M: node define-variables* drop ;
@@ -186,6 +213,7 @@ M: #if add-var-infos*
 ERROR: no-var-info var ;
 
 <PRIVATE
+! TODO: base check on nodes slot
 : check-module ( module -- )
     variables>> values
     [ dup info>> [ drop ] [ no-var-info ] if ] each
@@ -196,14 +224,14 @@ ERROR: no-var-info var ;
 ! corresponding globals set
 :: (each-node-in-module) ( name effect tree quot -- )
     [
-        effect <module> name >>name current-module set-global
+        name effect <module> current-module set-global
         tree compute-def-use
         dup [ [ define-variables* ] [ add-var-infos* ] bi ] each-node
         ! mod check-module
         [ quot call( node -- ) ] each-node
     ] with-scope ;
 
-GENERIC: get-module-name ( quot/word -- module )
+GENERIC: get-module-name ( quot/word -- str )
 M: callable get-module-name drop "anon" ;
 M: word get-module-name name>> ;
 
@@ -234,4 +262,14 @@ PRIVATE>
 
 ! Convert quotation or word into an fhdl module.
 : fhdl-module ( quot/word -- module )
-    [ drop ] each-node-in-module mod ;
+    [ get-module-name ]
+    [ get-module-effect <module> current-module set-global ]
+    [ get-module-def ] tri
+    build-fhdl-tree compute-def-use
+    [
+        [ dup code-node? [ mod nodes>> push ] [ drop ] if ]
+        [ define-variables* ]
+        [ add-var-infos* ] tri
+    ] each-node
+    current-module get
+    ;
