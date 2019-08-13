@@ -18,6 +18,8 @@ TUPLE: module
     effect
     variables
     registers           ! associates local boxes with variables
+    inputs              ! all variables which are inputs
+    outputs             ! all variables which are outputs
     nodes               ! All nodes which must be considered for code generation
     ;
 
@@ -26,6 +28,8 @@ TUPLE: module
     swap  >>name
     H{ } clone >>variables
     IH{ } clone >>registers
+    V{ } clone >>inputs
+    V{ } clone >>outputs
     V{ } clone >>nodes
     ;
 
@@ -40,7 +44,6 @@ TUPLE: var value info name ;
 : <var> ( value -- var )
     var new swap >>value ;
 TUPLE: input < var ;
-TUPLE: output < var ;
 TUPLE: wire < var ;
 TUPLE: register < var setter-name ;
 TUPLE: parameter < var literal ;
@@ -68,6 +71,9 @@ TUPLE: parameter < var literal ;
 : get-register-create ( node -- reg )
     node-local-box mod registers>> [ <register> ] cache ;
 
+! Some accessors for code generation
+: module-registers ( module -- seq )
+    registers>> values ;
 <PRIVATE
 
 ! Augment a quotation on values with info on top of stack
@@ -103,11 +109,13 @@ PRIVATE>
 
 : value-name ( value -- name )
     dup mod variables>> at name>>
-    [ nip ] [ "v%d" sprintf ] if* ;
+    [ nip ] [ "NONAME%d" sprintf ] if* ;
+
+: var-range ( var -- interval )
+    info>> interval>> ;
 
 : value-range ( value -- interval )
-    mod variables>> at info>> interval>> ;
-
+    mod variables>> at var-range ;
 
 ! Called on each node to determine whether the node should be added to the list
 ! of code-generation nodes.
@@ -144,9 +152,13 @@ UNION: var-definer #call #push ;
 ! These nodes have value info
 UNION: var-consumer #call #return ;
 
-M: #call define-variables* out-d>> [ wire add-var ] each ;
+M: #call define-variables*
+    out-d>> [ [ "res_%d" sprintf ] [ wire get-var-create ] bi name<< ] each ;
 
-M: #push define-variables* out-d>> first parameter add-var ;
+M: #push define-variables*
+    out-d>> first
+    [ "const_%d" sprintf ]
+    [ parameter get-var-create ] bi name<< ;
 
 ! FIXME: this code duplication should be caught in dispatch
 M: local-reader-node define-variables* ( node -- )
@@ -156,12 +168,14 @@ M: local-reader-node define-variables* ( node -- )
 M: #introduce define-variables*
     out-d>> [ input get-var-create ] map
     mod effect>> effect-inputs
-    [ swap name<< ] 2each ;
+    [ >>name mod inputs>> push ] 2each ;
 
+! Assumes that for each returning value, a variable has already be defined by
+! the producer
 M: #return define-variables*
-    in-d>> [ output get-var-create ] map
+    in-d>> [ get-var ] map
     mod effect>> effect-outputs
-    [ swap name<< ] 2each ;
+    [ >>name mod outputs>> push ] 2each ;
 
 M: #renaming define-variables*
     inputs/outputs [ [ get-var ] dip mod variables>> set-at ] 2each ;

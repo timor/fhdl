@@ -65,8 +65,4 @@ MACRO: fir ( coeffs -- quot )
 MACRO: counter ( n -- quot )
     [counter] ;
 
-! * Generating Verilog Code
-
-! Print a verilog implementation of the word or quotation to standard output.
-: verilog. ( quot/word -- )
-    code>verilog ;
+! * TODO remove headline Generating Verilog Code

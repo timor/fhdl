@@ -9,31 +9,29 @@ GENERIC: literal>verilog ( literal -- str )
 M: number literal>verilog number>string ;
 M: boolean literal>verilog "1" "0" ? ;
 
-: var-range ( interval -- str )
+: range-spec ( interval -- str )
     {
         { full-interval [ "[FULL]" ] }
-        { empty-interval [ "[EMPTY]" ] }
+        { empty-interval [ "" ] }
         [ interval-length log2 1 + "[%s:0]" sprintf ]
     } case ;
 
-: ranged-var ( name interval -- str ) var-range "%s %s" sprintf ;
+: decl-range ( name interval -- str ) range-spec swap "%s %s" sprintf ;
+: ranged-var ( name interval -- str ) range-spec "%s %s" sprintf ;
 
+! FIXME: name clash with var-declaration in fhdl.module
 : var-decl ( name interval type -- str )
-    -rot ranged-var "%s %s;" sprintf ;
+    -rot decl-range "%s %s;" sprintf ;
 
-! TODO probably unused
-: assign-reg ( lhs-name rhs-name -- str )
-    "%s <= %s;" sprintf ;
+: procedural-assignment ( lhs-name rhs -- str )
+    "%s = %s;" sprintf ;
 
 ! FIXME rename to explicit-assignment
 : assign-net ( lhs-name rhs-name -- str )
     "assign %s = %s;" sprintf ;
 
 : parameter-definition ( lhs-name value -- str )
-    "parameter %s = %d;" sprintf ;
-
-: implicit-assignment ( lhs-name rhs -- str )
-    "wire %s = %s;" sprintf ;
+    "parameter %s = %s;" sprintf ;
 
 : binary-expression ( v1 v2 op -- str )
     swap "(%s %s %s)" sprintf ;
@@ -45,12 +43,13 @@ M: boolean literal>verilog "1" "0" ? ;
     [ "if(%s)\n" sprintf ] [ " " prepend ] [ "\nelse\n " prepend ] tri*
     append append ;
 
-: reg-always-block ( source-val-name reg-val-name clock reset -- str )
-    [ "always @(posedge %s or posedge %s) " sprintf ] keep
-    "%s == 1'b1" sprintf
-    2swap [ nip 0 assign-reg ] [ swap assign-reg ] 2bi
-    if-else-statement
-    wrap-begin-block append ;
+: always-at-clock ( clock-name -- str )
+    "always @(posedge %s) " sprintf ;
+
+: reg-always-block ( source-val-name reg-val-name clock -- str )
+    always-at-clock
+    [ swap procedural-assignment ] dip
+    swap append ;
 
 : begin-module ( name ports -- str )
     ", " join

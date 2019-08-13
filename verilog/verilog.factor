@@ -1,6 +1,6 @@
-USING: accessors assocs compiler.tree compiler.tree.def-use.simplified
-fhdl.module fhdl.tree.locals-propagation fhdl.verilog.syntax formatting io
-kernel math.intervals sequences sets variables ;
+USING: accessors assocs combinators.short-circuit compiler.tree fhdl.module
+fhdl.tree.locals-propagation fhdl.verilog.syntax formatting io kernel locals
+math.intervals math.parser sequences sets variables ;
 
 IN: fhdl.verilog
 
@@ -8,109 +8,107 @@ FROM: fhdl.module => mod ;
 
 ! * Clocks and resets
 
-! Per default, each module gets prefixed with a clock and an async reset value implicitly,
+! Per default, each module gets prefixed with a clock
 ! which is connected to all registers implicitly
-VAR: visited-regs
 
 GLOBAL: clock-name
-GLOBAL: reset-name
+GLOBAL: reset-name              ! unused
 "clock" set: clock-name
 "reset" set: reset-name
 
 ! * Verilog representations
 
 <PRIVATE
+: typed-decl ( var type -- str )
+    [ [ name>> ] [ var-range ] bi ] dip var-decl ;
 
-! FIXME: rename to var-declaration
+GENERIC: var-declaration ( variable -- str )
+M: input var-declaration "input" typed-decl ;
+M: wire var-declaration "wire" typed-decl ;
+M: parameter var-declaration
+    [ name>> ] [ literal>> literal>verilog ] bi parameter-definition ;
+M: register var-declaration
+    [ name>> ] [ setter-name>> ] [ var-range ] tri
+    "reg" "wire" [ var-decl ] bi-curry@
+     bi-curry bi*
+    "\n" glue ;
+
 : var-definition ( value type -- str )
     [ [ value-name ] [ value-range ] bi ] dip
     var-decl ;
 
-! FIXME: wire-definition
-: wire-definition ( value -- str )
-    "wire" var-definition ;
+: implicit-wire-definition ( var rhs -- str )
+    [ [ var-range range-spec ] [ name>> ] bi ] dip
+    "wire %s %s = %s;" sprintf ;
 
 PRIVATE>
 
-! * Verilog Code Generation from SSA Tree Node
+! * Verilog Code Generation from FHDL Module
+
+! A module, which has been constructed by `build-fhdl-module` contains enough
+! information to generate corresponding Verilog code.
+! First, all declarations are generated.  Then the relevant nodes of the SSA
+! Tree are traversed, and corresponding verilog code emitted.
+! Before emitting the closing module statement, the clocked processes which
+! generate the registers are emitted.
+
+! ** Module Header and declarations
+
+:: verilog-header. ( module -- )
+    module [ name>> ] [ inputs>> ] [ outputs>> ] tri :> ( name ins outs )
+    name ins outs append [ name>> ] map clock-name prefix begin-module print
+    clock-name empty-interval "input" var-decl print
+    ins [ var-declaration print ] each
+    outs [ "output" typed-decl print ] each
+    module module-registers [ var-declaration print ] each
+    ! module variables>> values members
+    ! [ { [ wire? ] [ name>> ] } 1&& ] filter [ var-declaration print ] each
+    ;
+
+
+! ** Verilog Code Generation from SSA Tree Node
 
 ! This is called for each node, and expected to print verilog code to stdout
 GENERIC: node>verilog ( node -- )
 
-M: #introduce node>verilog
-    mod [ name>> ] [ effect>> effect-ports append ] bi
-    reset-name prefix clock-name prefix
-    begin-module print
-    clock-name empty-interval "input" var-decl print
-    reset-name empty-interval "input" var-decl print
-
-    out-d>> [
-        "input" var-definition print
-    ] each
-    ;
-
+! TODO: TEST
 M: #call node>verilog
-    dup out-d>> [
-        "wire" var-definition print
-    ] each
-
-    out-d>>
     [ word>> name>> ]
     [ identity-hashcode "inst_%d" sprintf ]
     [ in-d>> [ value-name ] map ", " join ] tri
-    instance print ;
-
-! TODO: actually use guard, or drop that mechanism in favor of reg statements
-! generated from module var list
-! local writer nodes don't have 1-to-1 equivalent verilog statements.
-! Assignment is done producer nodes, not consumer nodes.  Thus, these are used
-! to generate the code which actually sets the variable.  Since there can be
-! more than one local writer node for one local variable, we must make sure that
-! the code is generated only once.
-! M: local-writer-node node>verilog
-!     dup node-local-box mod registers>> at
-!     [ drop ]
-!     [
-!         ! dup visited-regs adjoin
-!         [ setter-name>> ] [ name>> ] bi clock-name reset-name
-!         reg-always-block print
-!     ] if ;
-
-M: local-reader-node node>verilog drop ;
+    instance print
+    ;
 
 M: local-writer-node node>verilog
-    [ get-register-create setter-name>> ]
+    [ node-local-box mod registers>> at setter-name>> ]
     [ in-d>> first value-name ] bi
     assign-net print ;
 
-! FIXME: this should be handled on module level, not verilog code generation
-<PRIVATE
-: reg-push-node? ( node -- ? )
-    out-d>> first actually-used-by first node>>
-    [ local-writer-node? ] [ local-reader-node? ] bi or ;
-PRIVATE>
-
+! FIXME: currently special-cased on number literals
 M: #push node>verilog
-    dup reg-push-node?
-    [ drop ] [
-        out-d>> first [ value-name ] [ get-var info>> literal>> ] bi
-        parameter-definition print
-    ] if ;
+    out-d>> first [ value-name ] [ get-var info>> literal>> ] bi
+    number>string parameter-definition print ;
 
-! Note that the assignment of the output is actually done by whatever produces
-! the value, e.g. a call or a registered assignment
-M: #return node>verilog
-    in-d>> [ "output" var-definition print ] each
+! ** Emitting the register logic processes
+
+: reg-assignments. ( module -- )
+    clock-name always-at-clock print
+    registers>> values
+    [
+        [ name>> ] [ setter-name>> ] bi procedural-assignment
+        "  " prepend
+    ] map "\n" join
+    wrap-begin-block print ;
+
+! ** Converting the Module into Verilog Code
+: module>verilog. ( module -- )
+    dup verilog-header. nl
+    dup nodes>> [ node>verilog ] each
+    reg-assignments. nl
     end-module print ;
-
-M: #declare node>verilog drop ;
-M: #renaming node>verilog drop ;
 
 ! * Converting a Word or Quotation into Verilog code
 
-! TODO: rename
-: code>verilog ( word/quot -- )
-    V{ } clone set: visited-regs
-    [
-        node>verilog
-    ] each-node-in-module ;
+! Print a verilog implementation of the word or quotation to standard output.
+: verilog. ( quot/word -- )
+    fhdl-module module>verilog. ;
