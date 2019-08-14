@@ -116,7 +116,7 @@ IN: fhdl.tree.locals-propagation
 ! #+begin_src factor
 PREDICATE: local-writer-node < #call word>> \ set-local-value = ;
 PREDICATE: local-reader-node < #call word>> \ local-value = ;
-PREDICATE: regular-call < #call [ local-writer-node? ] [ local-reader-node? ] bi@ or not ;
+PREDICATE: regular-call < #call [ local-writer-node? ] [ local-reader-node? ] bi or not ;
 
 SYMBOL: local-infos
 
