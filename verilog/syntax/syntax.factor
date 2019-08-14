@@ -7,6 +7,7 @@ IN: fhdl.verilog.syntax
 
 ! FIXME: maybe rename to verilog-literal
 GENERIC: literal>verilog ( literal -- str )
+M: object literal>verilog "INVALID(/*%u*/)" sprintf ;
 M: number literal>verilog number>string ;
 M: boolean literal>verilog "1" "0" ? ;
 
@@ -14,9 +15,9 @@ M: boolean literal>verilog "1" "0" ? ;
     {
         { full-interval [ "/*[FULL]*/" ] }
         { empty-interval [ "/*[EMPTY]*/" ] }
-        [ interval>points [ first abs ] bi@ max log2 "[%s:0]" sprintf
-          ! [ drop "/*[ZEROLENGTH]*/" sprintf ]
-          ! [ log2 1 + "[%s:0]" sprintf ] if
+        [ interval>points [ first abs ] bi@ max
+          [ "/*[ZEROLENGTH]*/" sprintf ]
+          [ log2 "[%s:0]" sprintf ] if-zero
         ]
     } case ;
 
