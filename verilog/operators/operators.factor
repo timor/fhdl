@@ -11,7 +11,10 @@ IN: fhdl.verilog.operators
 
 CONSTANT: binary-ops {
     { { fixnum+ +-integer-integer +-fixnum-integer } "+" }
+    { { fixnum- --integer-integer --fixnum-integer } "-" }
     { { fixnum* } "*" }
+    { { fixnum< } "<" }
+    { { fixnum> } ">" }
 }
 
 : binary-op-word? ( word -- ? )
