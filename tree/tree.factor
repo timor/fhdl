@@ -149,6 +149,7 @@ M: node add-input-edges
 
 
 ! Note: this currently relies on def-use and value-infos compiler information
+! FIXME: don't call this tree.
 : tree. ( word/quot -- )
     [
         build-fhdl-tree
