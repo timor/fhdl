@@ -11,13 +11,16 @@ M: object literal>verilog "INVALID(/*%u*/)" sprintf ;
 M: number literal>verilog number>string ;
 M: boolean literal>verilog "1" "0" ? ;
 
+! FIXME: currently treating all(!) number-defined intervals as signed numbers.
+! If there are going to be unsigned types, this needs to dispatch on the
+! variable class, e.g. fixnum being always signed,...
 : range-spec ( interval -- str )
     {
         { full-interval [ "/*[FULL]*/" ] }
         { empty-interval [ "/*[EMPTY]*/" ] }
         [ interval>points [ first abs ] bi@ max
-          [ "/*[ZEROLENGTH]*/" sprintf ]
-          [ log2 "[%s:0]" sprintf ] if-zero
+          [ "signed /*[ZEROLENGTH]*/" sprintf ]
+          [ log2 "signed [%s:0]" sprintf ] if-zero
         ]
     } case ;
 
