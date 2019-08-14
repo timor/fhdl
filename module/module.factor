@@ -1,8 +1,9 @@
 USING: accessors assocs compiler.tree compiler.tree.combinators
 compiler.tree.def-use compiler.tree.def-use.simplified
 compiler.tree.propagation.info definitions effects fhdl.tree
-fhdl.tree.locals-propagation formatting fry hashtables.identity kernel locals
-namespaces prettyprint quotations sequences stack-checker typed words ;
+fhdl.tree.locals-propagation fhdl.verilog.syntax formatting fry
+hashtables.identity kernel locals namespaces quotations sequences sequences.deep
+stack-checker typed words ;
 
 IN: fhdl.module
 
@@ -36,7 +37,7 @@ TUPLE: module
 SYMBOL: current-module
 : mod ( -- module ) current-module get ;
 
-! ** Variables
+! ** Variables (and Constants)
 
 
 ! TODO: maybe don't need value slot
@@ -45,6 +46,7 @@ TUPLE: var value info name ;
     var new swap >>value ;
 TUPLE: input < var ;
 TUPLE: wire < var ;
+TUPLE: constant < var literal-value ;
 TUPLE: register < var setter-name ;
 : <register> ( local-box -- var )
     register new swap
@@ -136,7 +138,7 @@ M: local-reader-node code-node? drop f ;
     [ local-writer-node? ] [ local-reader-node? ] bi or ;
 PRIVATE>
 
-M: #push code-node? reg-push-node? not ;
+M: #push code-node? drop f ;
 M: #if code-node? drop t ;
 
 ! Called on nodes which create new value>variable mappings
@@ -153,7 +155,7 @@ GENERIC: add-var-infos* ( node -- )
 M: node add-var-infos* drop ;
 
 ! These nodes define new wires
-UNION: var-definer regular-call #push ;
+UNION: var-definer regular-call ;
 ! These nodes have value info
 UNION: var-consumer #call #return ;
 
@@ -161,9 +163,8 @@ M: #call define-variables*
     out-d>> [ [ "res_%d" sprintf ] [ wire get-var-create ] bi name<< ] each ;
 
 M: #push define-variables*
-    out-d>> first
-    [ "const_%d" sprintf ]
-    [ wire get-var-create ] bi name<< ;
+    [ literal>> literal>verilog ]
+    [ out-d>> first constant get-var-create ] bi name<< ;
 
 ! FIXME: this code duplication should be caught in dispatch
 M: local-reader-node define-variables* ( node -- )
