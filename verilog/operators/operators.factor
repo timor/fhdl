@@ -23,9 +23,9 @@ CONSTANT: binary-ops {
 PREDICATE: binary-op-node < #call word>> binary-op-word? ;
 
 M: binary-op-node node>verilog
-    [ out-d>> first get-var ]
+    [ out-d>> first get-var name>> ]
     [ in-d>> [ value-name ] map first2 ]
     [ word>> verilog-operator ] tri
     binary-expression
-    implicit-wire-definition print
+    assign-net print
     ;

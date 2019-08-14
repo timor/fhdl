@@ -16,7 +16,7 @@ IN: fhdl.module
 TUPLE: module
     { name initial: "anon" }
     effect
-    variables
+    variables           ! associates SSA values with variables
     registers           ! associates local boxes with variables
     inputs              ! all variables which are inputs
     outputs             ! all variables which are outputs
@@ -46,7 +46,6 @@ TUPLE: var value info name ;
 TUPLE: input < var ;
 TUPLE: wire < var ;
 TUPLE: register < var setter-name ;
-TUPLE: parameter < var literal ;
 : <register> ( local-box -- var )
     register new swap
     identity-hashcode
@@ -64,7 +63,10 @@ TUPLE: parameter < var literal ;
 
 ! Given a value, return the variable which is associated with that value in the
 ! current module.
-: get-var ( value -- var ) mod variables>> at ;
+ERROR: value-has-no-variable value ;
+: get-var ( value -- var )
+    mod variables>> ?at
+    [ value-has-no-variable ] unless ;
 
 ! create a register variable, also define the name of the setter and reader
 ! based on the box hashcode
@@ -107,6 +109,7 @@ PRIVATE>
 ! TODO make private, after factoring out at call site
 : set-var-name ( value str -- ) swap get-var name<< ;
 
+! TODO see if this can be replaced by get-var name>> everywhere
 : value-name ( value -- name )
     dup mod variables>> at name>>
     [ nip ] [ "NONAME%d" sprintf ] if* ;
@@ -114,6 +117,7 @@ PRIVATE>
 : var-range ( var -- interval )
     info>> interval>> ;
 
+! TODO see if this can be replaced by get-var var-range everywhere
 : value-range ( value -- interval )
     mod variables>> at var-range ;
 
@@ -123,6 +127,7 @@ PRIVATE>
 GENERIC: code-node? ( node -- ? )
 M: node code-node? drop f ;
 M: #call code-node? drop t ;
+M: #return code-node? drop t ;
 M: local-reader-node code-node? drop f ;
 
 <PRIVATE
@@ -148,7 +153,7 @@ GENERIC: add-var-infos* ( node -- )
 M: node add-var-infos* drop ;
 
 ! These nodes define new wires
-UNION: var-definer #call #push ;
+UNION: var-definer regular-call #push ;
 ! These nodes have value info
 UNION: var-consumer #call #return ;
 
@@ -158,7 +163,7 @@ M: #call define-variables*
 M: #push define-variables*
     out-d>> first
     [ "const_%d" sprintf ]
-    [ parameter get-var-create ] bi name<< ;
+    [ wire get-var-create ] bi name<< ;
 
 ! FIXME: this code duplication should be caught in dispatch
 M: local-reader-node define-variables* ( node -- )
@@ -172,10 +177,8 @@ M: #introduce define-variables*
 
 ! Assumes that for each returning value, a variable has already be defined by
 ! the producer
-M: #return define-variables*
-    in-d>> [ get-var ] map
-    mod effect>> effect-outputs
-    [ >>name mod outputs>> push ] 2each ;
+M: #return define-variables* in-d>> [ get-var mod outputs>> push ] each ;
+! M: #return define-variables* drop ;
 
 M: #renaming define-variables*
     inputs/outputs [ [ get-var ] dip mod variables>> set-at ] 2each ;
@@ -221,7 +224,14 @@ M: #if add-var-infos*
 ! M: #phi add-var-infos*
 !     phi-in
 
-! Rename the variables which are returned to the name of the output ports ;
+! ** Module information relevant for code emitters
+! To be used by emitter
+: module-locals ( module -- seq )
+    nodes>> [ var-definer? ] filter
+    [ out-d>> first get-var ] map ;
+
+: input-names ( module -- seq ) effect>> effect-inputs ;
+: output-names ( module -- seq ) effect>> effect-outputs ;
 
 ! * Walking a Tree with correct Context
 ERROR: no-var-info var ;
@@ -277,7 +287,7 @@ PRIVATE>
 ! Convert quotation or word into an fhdl module.
 : fhdl-module ( quot/word -- module )
     [ get-module-name ]
-    [ get-module-effect <module> current-module set-global ]
+    [ get-module-effect <module> current-module set ]
     [ get-module-def ] tri
     build-fhdl-tree compute-def-use
     [
@@ -287,3 +297,7 @@ PRIVATE>
     ] each-node
     current-module get
     ;
+
+! Combinator to run code with module context
+: with-fhdl-module ( module quot -- )
+    [ current-module ] dip with-variable ; inline

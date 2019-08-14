@@ -1,19 +1,23 @@
-USING: accessors combinators formatting kernel math math.intervals math.parser
-sequences shuffle ;
+USING: accessors combinators formatting kernel math math.intervals math.order
+math.parser sequences shuffle ;
 
 IN: fhdl.verilog.syntax
 
 ! * Verilog Syntax of emitted code
 
+! FIXME: maybe rename to verilog-literal
 GENERIC: literal>verilog ( literal -- str )
 M: number literal>verilog number>string ;
 M: boolean literal>verilog "1" "0" ? ;
 
 : range-spec ( interval -- str )
     {
-        { full-interval [ "[FULL]" ] }
-        { empty-interval [ "" ] }
-        [ interval-length log2 1 + "[%s:0]" sprintf ]
+        { full-interval [ "/*[FULL]*/" ] }
+        { empty-interval [ "/*[EMPTY]*/" ] }
+        [ interval>points [ first abs ] bi@ max log2 "[%s:0]" sprintf
+          ! [ drop "/*[ZEROLENGTH]*/" sprintf ]
+          ! [ log2 1 + "[%s:0]" sprintf ] if
+        ]
     } case ;
 
 : decl-range ( name interval -- str ) range-spec swap "%s %s" sprintf ;
@@ -60,4 +64,4 @@ M: boolean literal>verilog "1" "0" ? ;
 
 : instance ( type name ports -- str )
     ", " join
-    "%s %s(%s);" sprintf ;
+    "\\%s %s(%s);" sprintf ;

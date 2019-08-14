@@ -9,7 +9,7 @@ IN: fhdl.verilog.tests
     { "x_o_0" }
 } [ [ + ] infer effect-ports ] unit-test
 
-{ "wire  foo = bar;" } [
+{ "wire /*[EMPTY]*/ foo = bar;" } [
     wire new "foo" >>name <value-info> empty-interval >>interval >>info
     "bar" implicit-wire-definition
                       ] unit-test

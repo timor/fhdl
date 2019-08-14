@@ -1,6 +1,6 @@
-USING: accessors assocs combinators.short-circuit compiler.tree fhdl.module
-fhdl.tree.locals-propagation fhdl.verilog.syntax formatting io kernel locals
-math.intervals math.parser sequences sets variables ;
+USING: accessors arrays assocs combinators compiler.tree fhdl.module
+fhdl.tree.locals-propagation fhdl.verilog.syntax formatting io kernel
+math.intervals sequences variables ;
 
 IN: fhdl.verilog
 
@@ -25,8 +25,6 @@ GLOBAL: reset-name              ! unused
 GENERIC: var-declaration ( variable -- str )
 M: input var-declaration "input" typed-decl ;
 M: wire var-declaration "wire" typed-decl ;
-M: parameter var-declaration
-    [ name>> ] [ literal>> literal>verilog ] bi parameter-definition ;
 M: register var-declaration
     [ name>> ] [ setter-name>> ] [ var-range ] tri
     "reg" "wire" [ var-decl ] bi-curry@
@@ -36,6 +34,11 @@ M: register var-declaration
 : var-definition ( value type -- str )
     [ [ value-name ] [ value-range ] bi ] dip
     var-decl ;
+
+! If a variable is used as output, a corresponding output var decl needs to
+! be generated.  The setter for this is emitted from the #return node.
+: named-output-declaration ( name var -- str )
+    var-range "output" var-decl ;
 
 : implicit-wire-definition ( var rhs -- str )
     [ [ var-range range-spec ] [ name>> ] bi ] dip
@@ -54,15 +57,22 @@ PRIVATE>
 
 ! ** Module Header and declarations
 
-:: verilog-header. ( module -- )
-    module [ name>> ] [ inputs>> ] [ outputs>> ] tri :> ( name ins outs )
-    name ins outs append [ name>> ] map clock-name prefix begin-module print
+: verilog-header ( module -- str )
+    [ name>> ] [ input-names ] [ output-names ] tri
+    append clock-name prefix begin-module ;
+
+: locals-declarations ( module -- seq )
+    {
+        [ inputs>> [ var-declaration ] map ]
+        [ [ output-names ] [ outputs>> ] bi [ named-output-declaration ] 2map ]
+        [ module-registers [ var-declaration ] map ]
+        [ module-locals [ "wire" typed-decl ] map ]
+    } cleave 4array concat ;
+
+: verilog-preamble. ( module -- )
+    dup verilog-header print
     clock-name empty-interval "input" var-decl print
-    ins [ var-declaration print ] each
-    outs [ "output" typed-decl print ] each
-    module module-registers [ var-declaration print ] each
-    ! module variables>> values members
-    ! [ { [ wire? ] [ name>> ] } 1&& ] filter [ var-declaration print ] each
+    locals-declarations [ print ] each
     ;
 
 
@@ -75,7 +85,7 @@ GENERIC: node>verilog ( node -- )
 M: #call node>verilog
     [ word>> name>> ]
     [ identity-hashcode "inst_%d" sprintf ]
-    [ in-d>> [ value-name ] map ", " join ] tri
+    [ [ in-d>> ] [ out-d>> ] bi append [ value-name ] map ] tri
     instance print
     ;
 
@@ -84,28 +94,37 @@ M: local-writer-node node>verilog
     [ in-d>> first value-name ] bi
     assign-net print ;
 
-! FIXME: currently special-cased on number literals
 M: #push node>verilog
     out-d>> first [ value-name ] [ get-var info>> literal>> ] bi
-    number>string parameter-definition print ;
+    literal>verilog assign-net print ;
+
+M: #return node>verilog
+    in-d>>
+    mod output-names swap
+    [ get-var name>> assign-net print ] 2each ;
 
 ! ** Emitting the register logic processes
 
 : reg-assignments. ( module -- )
-    clock-name always-at-clock print
-    registers>> values
+    module-registers dup empty?
+    [ drop ]
     [
-        [ name>> ] [ setter-name>> ] bi procedural-assignment
-        "  " prepend
-    ] map "\n" join
-    wrap-begin-block print ;
+        clock-name always-at-clock print
+        [
+            [ name>> ] [ setter-name>> ] bi procedural-assignment
+            "  " prepend
+        ] map "\n" join
+        wrap-begin-block print
+    ] if ;
 
 ! ** Converting the Module into Verilog Code
 : module>verilog. ( module -- )
-    dup verilog-header. nl
-    dup nodes>> [ node>verilog ] each
-    reg-assignments. nl
-    end-module print ;
+    [ mod
+      dup verilog-preamble. nl
+      dup nodes>> [ node>verilog ] each
+      reg-assignments. nl
+      end-module print ] with-fhdl-module
+    ;
 
 ! * Converting a Word or Quotation into Verilog code
 
