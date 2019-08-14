@@ -22,6 +22,7 @@ TUPLE: module
     inputs              ! all variables which are inputs
     outputs             ! all variables which are outputs
     nodes               ! All nodes which must be considered for code generation
+    conditions          ! associates phi nodes with their corresponding conditionals
     ;
 
 : <module> ( name effect -- module )
@@ -32,6 +33,7 @@ TUPLE: module
     V{ } clone >>inputs
     V{ } clone >>outputs
     V{ } clone >>nodes
+    IH{ } clone >>conditions
     ;
 
 SYMBOL: current-module
@@ -55,6 +57,7 @@ TUPLE: register < var setter-name ;
     [ "next_%d" sprintf >>setter-name ] bi
     ;
 
+! FIXME unused
 :: <named-var> ( value info prefix -- var )
     value <var> info >>info
     prefix value "%s_%d" sprintf >>name ;
@@ -69,6 +72,9 @@ ERROR: value-has-no-variable value ;
 : get-var ( value -- var )
     mod variables>> ?at
     [ value-has-no-variable ] unless ;
+
+: get-condition ( node -- var )
+    mod conditions>> at get-var ;
 
 ! create a register variable, also define the name of the setter and reader
 ! based on the box hashcode
@@ -93,8 +99,14 @@ ERROR: value-has-no-variable value ;
 
 : add-var ( value class -- ) get-var-create drop ;
 
-! TODO: err if written to twice
-: set-var-info ( value info -- ) swap get-var info<< ;
+! Note: If a var-info is set twice, then because the renaming chain into
+! different execution paths crossed some constraint domain.  Since we
+! explicitely choose to represent renamed values by the same variable, the union
+! of the value info is created
+: set-var-info ( value info -- )
+    [ get-var ] dip
+    over info>> [ value-info-union ] when*
+    swap info<< ;
 
  ! : get-register ( slot-box -- register ) mod registers>> [ <register> ] cache ;
 
@@ -139,7 +151,15 @@ M: local-reader-node code-node? drop f ;
 PRIVATE>
 
 M: #push code-node? drop f ;
-M: #if code-node? drop t ;
+
+! Handling if statements: The tree contains #branch and #phi nodes.  These are
+! turned into predicated statements, resulting in a multiplexer for each output
+! that leaves a phi node.  When an #branch node is encountered, the input is saved
+! in order to associate the outputs of the corresponding #phi nodes with the
+! right conditional.  Code emission is done on the #phi node, which contains all
+! necessary information to generate the corresponding multiplexer statements.
+M: #branch code-node? drop f ;
+M: #phi code-node? drop t ;
 
 ! Called on nodes which create new value>variable mappings
 ! Need to update the current module variables
@@ -155,12 +175,17 @@ GENERIC: add-var-infos* ( node -- )
 M: node add-var-infos* drop ;
 
 ! These nodes define new wires
-UNION: var-definer regular-call ;
+UNION: var-definer regular-call #phi ;
 ! These nodes have value info
 UNION: var-consumer #call #return ;
+! #phi nodes also have info, but this is accessed with phi-in-d>>, so a separate
+! method is needed.
 
 M: #call define-variables*
     out-d>> [ [ "res_%d" sprintf ] [ wire get-var-create ] bi name<< ] each ;
+
+M: #phi define-variables*
+    out-d>> [ [ "choice_%d" sprintf ] [ wire get-var-create ] bi name<< ] each ;
 
 M: #push define-variables*
     [ literal>> literal>verilog ]
@@ -200,6 +225,11 @@ M: var-consumer add-var-infos*
     [ in-d>> ] [ node-input-infos ] bi
     [ set-var-info ] 2each ;
 
+M: #phi add-var-infos*
+    [ phi-in-d>> ] [ phi-info-d>> ] bi
+    [ flatten ] bi@
+    [ set-var-info ] 2each ;
+
 ! Producer, sets the name of the output value based on the register information
 ! FIXME: deduplicate with after method on var-consumer
 M: local-reader-node add-var-infos*
@@ -219,7 +249,7 @@ M: local-reader-node add-var-infos*
 !     set-var-info
 !     ;
 
-M: #if add-var-infos*
+M: #branch add-var-infos*
     in-d>> first boolean <class-info> set-var-info ;
 
 ! M: #phi add-var-infos*
@@ -229,7 +259,7 @@ M: #if add-var-infos*
 ! To be used by emitter
 : module-locals ( module -- seq )
     nodes>> [ var-definer? ] filter
-    [ out-d>> first get-var ] map ;
+    [ out-d>> ] map concat [ get-var ] map ;
 
 : input-names ( module -- seq ) effect>> effect-inputs ;
 : output-names ( module -- seq ) effect>> effect-outputs ;
@@ -285,13 +315,29 @@ PRIVATE>
     ] dip (each-node-in-module)
     ;
 
+! Keeping track of conditionals: Every #branch node should be followed by a #phi
+! node immediately, so we keep a stack of #branch nodes, and when the #phi is
+! encountered, the association is stored in the module, and the #branch is popped
+! from the stack
+SYMBOL: branch-stack
+
+GENERIC: track-conditions ( node -- )
+M: node track-conditions drop ;
+M: #branch track-conditions branch-stack get push ;
+M: #phi track-conditions
+    branch-stack get pop in-d>> first
+    swap mod conditions>> set-at ;
+
 ! Convert quotation or word into an fhdl module.
 : fhdl-module ( quot/word -- module )
+    V{ } branch-stack set
     [ get-module-name ]
     [ get-module-effect <module> current-module set ]
     [ get-module-def ] tri
     build-fhdl-tree compute-def-use
     [
+        ! TODO: cleave
+        dup track-conditions
         [ dup code-node? [ mod nodes>> push ] [ drop ] if ]
         [ define-variables* ]
         [ add-var-infos* ] tri

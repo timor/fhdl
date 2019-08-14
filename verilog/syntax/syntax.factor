@@ -66,3 +66,7 @@ M: boolean literal>verilog "1" "0" ? ;
 : instance ( type name ports -- str )
     ", " join
     "\\%s %s(%s);" sprintf ;
+
+! Ternary conditional expression
+: conditional-expr ( selector then else -- str )
+    "%s ? %s : %s" sprintf ;

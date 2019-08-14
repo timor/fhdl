@@ -1,5 +1,5 @@
 USING: accessors arrays assocs combinators compiler.tree fhdl.module
-fhdl.tree.locals-propagation fhdl.verilog.syntax formatting io kernel
+fhdl.tree.locals-propagation fhdl.verilog.syntax formatting io kernel locals
 math.intervals sequences variables ;
 
 IN: fhdl.verilog
@@ -76,7 +76,7 @@ PRIVATE>
     ;
 
 
-! ** Verilog Code Generation from SSA Tree Node
+! ** Verilog Code Generation from SSA Tree Nodes
 
 ! This is called for each node, and expected to print verilog code to stdout
 GENERIC: node>verilog ( node -- )
@@ -102,6 +102,16 @@ M: #return node>verilog
     in-d>>
     mod output-names swap
     [ get-var name>> assign-net print ] 2each ;
+
+M: #phi node>verilog
+    [let
+     [ phi-in-d>> ] [ out-d>> ] [ get-condition ] tri :> ( ins outs cond )
+     outs ins first2
+     [
+         [ get-var name>> ] tri@ [ cond name>> ] 2dip conditional-expr
+         assign-net print
+     ] 3each
+    ] ;
 
 ! ** Emitting the register logic processes
 
