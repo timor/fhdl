@@ -1,7 +1,7 @@
-USING: accessors assocs compiler.tree compiler.tree.combinators
+USING: accessors arrays assocs compiler.tree compiler.tree.combinators
 compiler.tree.propagation compiler.tree.propagation.call-effect
-compiler.tree.propagation.info hashtables.identity io kernel locals.backend math
-math.intervals math.parser namespaces sequences vectors words ;
+compiler.tree.propagation.info hashtables.identity kernel locals.backend math
+namespaces sequences vectors words ;
 
 IN: fhdl.tree.locals-propagation
 
@@ -199,7 +199,7 @@ ERROR: local-value-infos-not-converging ;
 
 ! This is is the top-level function that should be inserted as a pass during
 ! frontend compilation.
-: optimize-locals ( nodes -- nodes )
+: (optimize-locals) ( nodes -- nodes )
     init-local-infos
     optimize-locals-run
     local-infos get assoc-size swap
@@ -211,6 +211,10 @@ ERROR: local-value-infos-not-converging ;
     ]
     until nip
     ;
+
+: optimize-locals ( nodes -- nodes' )
+    dup [ local-writer-node? ] map-nodes [ ] any?
+    [ (optimize-locals) ] when ;
 
 \ local-value [
     literal>> local-infos get at
