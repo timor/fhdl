@@ -11,16 +11,25 @@ M: object literal>verilog "INVALID(/*%u*/)" sprintf ;
 M: number literal>verilog number>string ;
 M: boolean literal>verilog "1" "0" ? ;
 
-! FIXME: currently treating all(!) number-defined intervals as signed numbers.
-! If there are going to be unsigned types, this needs to dispatch on the
-! variable class, e.g. fixnum being always signed,...
+: literal-zero-interval? ( int -- ? )
+    { [ interval-zero? ] [ interval-singleton? ] } 1&& ;
+
+! If an interval contains negative numbers, then we switch to signed.
+! TODO: validate bit-widths
+: interval-bitrange ( interval -- str )
+    [ from>> ] [ to>> [ first abs ] bi@ max log2 ] [ interval-nonnegative? ] tri
+    [ "" ] [ "signed " ] if
+    swap "%s[%d:0]" sprintf
+    ;
+
+
 : range-spec ( interval -- str )
     {
         { full-interval [ "/*[FULL]*/" ] }
         { empty-interval [ "/*[EMPTY]*/" ] }
-        [ interval>points [ first abs ] bi@ max
-          [ "signed /*[ZEROLENGTH]*/" sprintf ]
-          [ log2 "signed [%s:0]" sprintf ] if-zero
+        [ dup literal-zero-interval?
+          [ drop "/*[ZEROLENGTH]*/" ]
+          [ interval-bitrange ] if
         ]
     } case ;
 
