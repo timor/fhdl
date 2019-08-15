@@ -9,7 +9,7 @@ compiler.tree.optimizer compiler.tree.propagation compiler.tree.propagation.info
 compiler.tree.recursive compiler.tree.tuple-unboxing
 fhdl.tree.locals-propagation formatting graphviz graphviz.notation
 graphviz.render images.viewer io.files.temp kernel locals math math.intervals
-math.parser namespaces present prettyprint sequences strings ui
+math.parser namespaces present sequences strings ui
 ui.gadgets.scrollers ;
 IN: fhdl.tree
 
@@ -71,7 +71,7 @@ M: #push node-name
 
 : value-label ( value prefix -- str )
     swap
-    value-info dup . interval>> interval-length intervall-length>str "(" ")" surround
+    value-info interval>> interval-length intervall-length>str "(" ")" surround
     append ;
 
 : escape-node-name ( str -- str )
