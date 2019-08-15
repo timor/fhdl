@@ -43,7 +43,7 @@ PRIVATE>
 ! addition to a state and output transfer function (stf). There is a small
 ! sub-protocol operating on these stfs before they are given to the [1mealy]
 ! "constructor".  This allows things like adding enable signals or synchronous
-! clears
+! clears.
 
 ! based on a state transition function and an initial state, generate a
 ! quotation that implements that recurrence relation.
