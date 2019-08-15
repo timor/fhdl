@@ -71,7 +71,7 @@ PRIVATE>
 
 : verilog-preamble. ( module -- )
     dup verilog-header print
-    clock-name empty-interval "input" var-decl print
+    clock-name full-interval "input" var-decl print
     locals-declarations [ print ] each
     ;
 
