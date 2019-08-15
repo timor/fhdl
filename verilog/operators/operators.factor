@@ -10,11 +10,11 @@ IN: fhdl.verilog.operators
 ! transformed into calls to specialized words on fixnums and integers
 
 CONSTANT: binary-ops {
-    { { fixnum+ fixnum+fast +-integer-integer +-fixnum-integer } "+" }
-    { { fixnum- fixnum-fast --integer-integer --fixnum-integer } "-" }
-    { { fixnum* } "*" }
-    { { fixnum< } "<" }
-    { { fixnum> } ">" }
+    { $[ \ + integer-derived-ops ] "+" }
+    { $[ \ - integer-derived-ops ] "-" }
+    { $[ \ * integer-derived-ops ] "*" }
+    { $[ \ < integer-derived-ops ] "<" }
+    { $[ \ > integer-derived-ops ] ">" }
 }
 
 : binary-op-word? ( word -- ? )
