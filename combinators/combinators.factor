@@ -1,5 +1,5 @@
-USING: assocs combinators.smart fry hashtables.identity kernel kernel.private
-locals math namespaces sequences ;
+USING: assocs combinators.smart fhdl.types fry hashtables.identity kernel
+kernel.private locals math namespaces sequences ;
 
 IN: fhdl.combinators
 
@@ -83,9 +83,9 @@ PRIVATE>
     [ ] 0 [1mealy] without-state-output ;
 
 ! Return a quotation which counts internally from 0 up to n each time it is
-! called with enable
+! called, and outputs the current counter value
 :: [counter] ( n -- quot: ( -- x ) )
-    [| s | s 1 + dup n > [ drop 0 ] when s ] 0 [1mealy] without-state-output ;
+    [| s | s { natural } declare 1 + dup n > [ drop 0 ] when s ] 0 [1mealy] without-state-output ;
 
 ! * Accumulator definition ( example character )
 : acc-stf ( reg-declaration -- stf )

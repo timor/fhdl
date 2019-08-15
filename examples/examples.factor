@@ -1,4 +1,5 @@
-USING: fhdl fhdl.combinators fhdl.tree kernel.private math sequences typed ;
+USING: fhdl fhdl.combinators fhdl.module fhdl.tree fhdl.types fhdl.verilog
+kernel.private math sequences typed ;
 
 IN: fhdl.examples
 
