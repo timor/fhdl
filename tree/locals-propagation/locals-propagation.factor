@@ -1,6 +1,7 @@
 USING: accessors assocs compiler.tree compiler.tree.combinators
-compiler.tree.propagation compiler.tree.propagation.info hashtables.identity
-kernel locals.backend namespaces prettyprint sequences vectors words ;
+compiler.tree.propagation compiler.tree.propagation.call-effect
+compiler.tree.propagation.info hashtables.identity io kernel locals.backend math
+math.intervals math.parser namespaces sequences vectors words ;
 
 IN: fhdl.tree.locals-propagation
 
@@ -97,7 +98,7 @@ IN: fhdl.tree.locals-propagation
 ! the setters have to be considered.  For each local box, a list is created, which
 ! stores value info for that iteration.  The algorithm is then as follows:
 
-! 1. Initialize each local's list with the type of the initial value
+! 1. Initialize each local's list with the type of the initial value as the initial setter-information
 ! 2. For up to /n+1/ iterations, do
 !    1. Run a propagate pass
 !    2. For each setter node, use the computed value information, create the union
@@ -126,12 +127,20 @@ M: local-writer-node node-local-box
 M: local-reader-node node-local-box
     node-input-infos first literal>> ;
 
+! Each entry is initialized with two values, the first one being the initial
+! value info from the initial propagation pass, which is assumed has run before this is called.
 : init-local-infos ( nodes -- nodes )
     IH{ } clone local-infos set
     dup
     [
+        dup local-writer-node?
+        [ [ node-input-infos first 1vector ] [ node-local-box ] bi local-infos get set-at ]
+        [ drop ] if
+    ] each-node
+    dup
+    [
         dup local-reader-node?
-        [ node-local-box local-infos get [ first clone <literal-info> 1vector ] cache drop ]
+        [ node-local-box [ first clone <literal-info> ] keep local-infos get push-at ]
         [ drop ] if
     ] each-node ;
 
@@ -175,16 +184,16 @@ M: local-reader-node node-local-box
 ERROR: local-value-infos-not-converging ;
 
 ! This re-initializes the local value infos so that the variables that diverge
-! will start with the full intervall.  The other info records are initialized like previously
+! will start with the initial interval.  The other info records are initialized like previously
 : unconstrain-local-infos ( -- )
     local-infos [
         [
             dup local-info-entry-converges?
             [
-                first
+                2 head
             ] [
-                last clone full-interval >>interval
-            ] if 1vector
+                first dup 2array
+            ] if >vector
         ] assoc-map
     ] change ;
 

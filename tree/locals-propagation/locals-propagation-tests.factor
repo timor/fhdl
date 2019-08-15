@@ -47,7 +47,7 @@ IN: fhdl.tree.locals-propagation.tests
 { t }
 [
     3reg-quot build-test-tree init-local-infos drop local-infos get values
-    [ first literal>> ] map
+    [ second literal>> ] map
     { -3 -2 -1 } set=
 ] unit-test
 
