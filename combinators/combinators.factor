@@ -72,13 +72,11 @@ PRIVATE>
      clear? { boolean } declare reset-val new-state ? output ]
     ;
 
-! : [reg] ( -- quot )
-!     gensym [ (reg) ] curry ;
-
 ! drop the state from a mealy quotation
 : without-state-output ( quot -- quot )
     [ drop ] compose ; inline
 
+! This is the simplest primitive sequential quotation
 : [reg] ( -- quot )
     [ ] 0 [1mealy] without-state-output ;
 
