@@ -45,14 +45,37 @@ PRIVATE>
 ! "constructor".  This allows things like adding enable signals or synchronous
 ! clears.
 
-! based on a state transition function and an initial state, generate a
+! Based on a state transition function and an initial state, generate a
 ! quotation that implements that recurrence relation.
 ! Implementation is based on lexical closure
-:: [1mealy] ( stf: ( ..a state -- ..b new-state output ) initial --
-              quot: ( -- out state ) )
-    initial :> state! stf '[ state @ swap dup state! ] ;
 
-! Add a load-enable to a state-transfer function when defining a mealy circuit.
+! The fact that this is implemented with composed as super class is important.  Using compose
+! preserves the structure of the underlying quotations, and allows access to
+! parts of the quotations afterwards.  Thus, all quotations returned by [1mealy]
+! can be used to derive new quotations.  This is used to define a small protocol
+! which can be used to add things like load-enable, clear, or type declarations.
+TUPLE: 1mealy < composed { state-getter read-only } { stf read-only } { output-quot read-only } ;
+
+:: <1mealy> ( state-getter stf output-quot -- 1mealy )
+    state-getter stf compose
+    output-quot
+    state-getter clone
+    stf clone
+    output-quot clone
+    1mealy boa ;
+
+:: [1mealy] ( stf: ( ..a state -- ..b new-state output ) initial -- quot: ( -- out state ) )
+    initial :> state!
+    [ state ] stf [ swap dup state! ] <1mealy> ;
+
+! Take a 1mealy and a quotation which modifies the state transition function,
+! return a new 1mealy.  Note that the resulting 1mealy shares state storage with
+! the original one, so it can not be used as a "template" mechanism.
+: change-stf ( 1mealy quot: ( stf -- stf' ) -- 1mealy' )
+    [ [ state-getter>> ] [ output-quot>> ] [ stf>> ] tri ] dip
+    call( stf -- stf' ) swap <1mealy> ;
+
+! Add a load-enable to a 1mealy function when defining a mealy circuit.
 ! This results in the resulting quotation to expect a flag on top of stack
 ! whether to latch the new state or the old state.
 :: with-load-enable ( stf: ( state -- new-state output ) --
@@ -88,16 +111,23 @@ PRIVATE>
 ! * Accumulator definition ( example character )
 : acc-stf ( reg-declaration -- stf )
     '[ _ declare [ + ] keep ] ;
+! The following functions define some example accumulators.  Note that these
+! will not be synthesizable if the output of the state-transition function is
+! not constrained.
+
+: acc-stf ( -- stf )
+    [ [ + ] keep ] ;
+
 
 : [acc] ( -- quot: ( x -- y ) )
-    [ [ + ] keep ] 0 [1mealy] without-state-output ;
+     acc-stf 0 [1mealy] without-state-output ;
 
 ! With sync clear
-: [acc-c] ( reg-declaration reset-val -- quot: ( x enable? -- y ) )
+: [acc-c] ( reset-val -- quot: ( x enable? -- y ) )
     [ acc-stf ] dip with-sync-clear 0 [1mealy] without-state-output ;
 
 ! With load enable
-: [acc-e] ( reg-declaration -- quot: ( x enable? -- y ) )
+: [acc-e] ( -- quot: ( x enable? -- y ) )
     acc-stf with-load-enable 0 [1mealy] without-state-output ;
 
 ! * DSP Structures
