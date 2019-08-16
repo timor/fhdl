@@ -213,7 +213,7 @@ ERROR: local-value-infos-not-converging ;
     ;
 
 : optimize-locals ( nodes -- nodes' )
-    dup [ local-writer-node? ] map-nodes [ ] any?
+    dup [ local-writer-node? ] contains-node?
     [ (optimize-locals) ] when ;
 
 \ local-value [
