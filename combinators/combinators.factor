@@ -1,6 +1,6 @@
 USING: accessors assocs combinators.smart fhdl.types fry hashtables.identity
-kernel kernel.private locals math math.bitwise math.functions namespaces
-sequences ;
+kernel kernel.private locals math math.bitwise math.functions math.order
+namespaces sequences ;
 
 IN: fhdl.combinators
 
@@ -70,23 +70,26 @@ IN: fhdl.combinators
 
 ! An accumulator has an adder in the feedback path.  This results in the
 ! accumulator being able to grow indefinitely.  Therefore, it needs to be
-! constrained.  Normally, one would specify the bit-width of the accumulator
-! directly.  Since we are working with actual executable code, the way it is
-! done is to constrain the output value of the accumulator to a certain size.
-! Contrary to what could be expected, the resulting register will be wider than
-! that, because type inference will determine that the register has to be able
-! to fit the result of the addition of the input with an (imaginary) initial
-! value of the specified size.
+! constrained.  This is done using factor's `wrap` word, which is implemented
+! with a bitmask internally.
 
-:: [acc] ( max -- quot: ( in -- acc ) )
-    [ max wrap + ] 0 <1moore> ;
 
-! One could also perform the wrap-around operation at the register input.
-! However, this has implications when clock-enable or synchronous clear behavior
-! is to be inferred, because a conservative backend synthesizer will create a
-! mux at the input instead of inferring a register with dedicated clear input.
-:: [acc'] ( max -- quot: ( in -- acc ) )
-    [ + max wrap ] 0 <1moore> ;
+:: [acc] ( limit -- quot: ( in -- acc ) )
+    [ + limit mod ] 0 <1moore> ;
+
+! ** Toggle Flipflop
+
+! One could also use the `bitnot` operator to enforce creating an inverter
+! instead of a mux.  For FPGAs, this could make a difference when some backend
+! synthesizer can absorb inverters into adjacent elements.
+: [tff] ( -- quot: ( -- out ) )
+    [ not ] f <1moore> ;
+
+! ** Counters
+
+! This is simply an accumulator with a constant 1 input
+: [counter] ( max -- quot )
+    [acc] [ 1 ] prepose ;
 
 
 ! * Obsolete
@@ -179,8 +182,8 @@ TUPLE: 1mealy < composed { state-getter read-only } { stf read-only } { output-q
 
 ! Return a quotation which counts internally from 0 up to n each time it is
 ! called, and outputs the current counter value
-:: [counter] ( n -- quot: ( -- x ) )
-    [| s | s { natural } declare 1 + dup n > [ drop 0 ] when s swap ] 0 [1mealy] ;
+! :: [counter] ( n -- quot: ( -- x ) )
+!     [| s | s { natural } declare 1 + dup n > [ drop 0 ] when s swap ] 0 [1mealy] ;
 
 ! * Accumulator definition ( example character )
 ! The following functions define some example accumulators.  Note that these
