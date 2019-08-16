@@ -1,5 +1,6 @@
-USING: assocs combinators.smart fhdl.types fry hashtables.identity kernel
-kernel.private locals math namespaces sequences ;
+USING: accessors assocs combinators.smart fhdl.types fry hashtables.identity
+kernel kernel.private locals math math.bitwise math.functions namespaces
+sequences ;
 
 IN: fhdl.combinators
 
@@ -8,52 +9,105 @@ IN: fhdl.combinators
 ! These words are used at macro-expansion time to build up quotations from
 ! smaller primitive quotations.
 
-! OBSOLETE At the moment, the only true primitive quotation is the [reg] word, which
-! generates the functionality to store the current input and return a previous
-! one.
-
-! TODO: maybe initial value support
-
-
-! * Primitive State Handling
-
-! The primitive for synthesizing register logic is the mealy combinator, which
-! takes a quotation ( input state -- output new-state ) as input, as
-! well as an initial state, and returns a quotation ( input -- ouput ! state ).
-! This combinator should suffice to compose all necessary structures
-! involving feedback.
-
-SYMBOL: state
-state [ IH{  } clone ] initialize
-
-<PRIVATE
-
-: get-state ( key -- seq )
-    state get at ;
-
-: set-state ( seq key -- )
-    state get set-at ;
-
-: (reg) ( x i -- x ) state get 2dup at [ set-at ] dip [ 0 ] unless* ;
-PRIVATE>
 
 ! * Sequential logic
 
-! The basic sequential combinator is [1mealy], which takes an initial value in
-! addition to a state and output transfer function (stf). There is a small
-! sub-protocol operating on these stfs before they are given to the [1mealy]
-! "constructor".  This allows things like adding enable signals or synchronous
-! clears.
+! ** Moore FSM
+! The most basic combinator is one which allocates a memory location
+! (synthesized as register), and takes a quotation which computes the value which
+! will be stored in that location on the next invocation (state transition
+! function, /stf/) of the resulting
+! quotation, with the current state on the top of the stack, and any inputs
+! below.  Additionally, an initial value has to be supplied.
 
-! Based on a state transition function and an initial state, generate a
-! quotation that implements that recurrence relation.
-! Implementation is based on lexical closure
+:: <1moore> ( stf: ( ..in state -- new-state ) initial --
+              quot: ( ..in -- state ) )
+    initial :> state!
+    [ state [ stf call state! ] keep ] ;
+
+! This is general enough to build any sequential element with state feedback,
+! the simplest being a single register, initialized to 0.  The state transfer
+! function consists of dropping the old state, and returning the top-most
+! stack-element as the next-state.  The resulting signature:
+! ( -- in ) + ( -- state ) + ( in state -- new-state ) + ( new-state -- state )
+! = ( in -- state )
+: [reg] ( -- quot )
+    [ drop ] 0 <1moore> ;
+
+! ** Compositional Combinators
+
+! Since a module/block/synthesizable-unit-of-code is represented by a quotation,
+! functionality can be added by using function composition.  In concatenative
+! languages, functional composition amounts to simply concatenating quotations.
+! To add functionality at the input, additional quotations can be preposed.  To
+! add stuff at the output, quotations are appended.  This could be done using
+! sequence operations, but Factor provides the words `prepose` and `compose` for
+! the respective operations on quotations.
+
+! *** Register chaining composition
+
+! FIXME describe (n)map-reduce instead
+! A recurring pattern in digital circuits is a chain of registers.  This
+! combinator abstracts over this pattern by generating a register for each
+! quotation in the provided sequence, connecting it to the next one and creating
+! an output for each stage, where the provided quotation is applied
+
+! Although in practice typed definitions should be used to set the input types
+! of a module-describing quotation, the following combinator is useful during
+! interactive development to prepose input type declarations:
+
+: with-declared-inputs ( quot decl -- quot' )
+    '[ _ declare ] prepose ;
+
+! * Examples
+
+! ** Register with clear and/or enable inputs
+
+: [regE] ( -- quot: ( in enable -- state ) )
+    [ swapd ? ] 0 <1moore> ;
+
+! ** Fixed-width wraparound accumulator
+
+! An accumulator has an adder in the feedback path.  This results in the
+! accumulator being able to grow indefinitely.  Therefore, it needs to be
+! constrained.  Normally, one would specify the bit-width of the accumulator
+! directly.  Since we are working with actual executable code, the way it is
+! done is to constrain the output value of the accumulator to a certain size.
+! Contrary to what could be expected, the resulting register will be wider than
+! that, because type inference will determine that the register has to be able
+! to fit the result of the addition of the input with an (imaginary) initial
+! value of the specified size.
+
+:: [acc] ( max -- quot: ( in -- acc ) )
+    [ max wrap + ] 0 <1moore> ;
+
+! One could also perform the wrap-around operation at the register input.
+! However, this has implications when clock-enable or synchronous clear behavior
+! is to be inferred, because a conservative backend synthesizer will create a
+! mux at the input instead of inferring a register with dedicated clear input.
+:: [acc'] ( max -- quot: ( in -- acc ) )
+    [ + max wrap ] 0 <1moore> ;
+
+
+! * Obsolete
+
+! the basic sequential combinator is [1mealy], which takes an initial value in
+! addition to a state and output transition function (stf). There is a
+! small sub-protocol operating on the results of this combinator, which allows
+! to modify stf and the output setting quotation,
+! returning a new 1mealy quotation. This allows things
+! like adding enable signals or synchronous clears.
 
 ! The fact that this is implemented with composed as super class is important.  Using compose
 ! preserves the structure of the underlying quotations, and allows access to
 ! parts of the quotations afterwards.  Thus, all quotations returned by [1mealy]
 ! can be used to derive new quotations.  This is used to define a small protocol
 ! which can be used to add things like load-enable, clear, or type declarations.
+
+! Based on a state transition function, output transition function and an
+! initial state, generate a quotation that implements that recurrence relation.
+! Implementation is based on lexical closure
+
 TUPLE: 1mealy < composed { state-getter read-only } { stf read-only } { output-quot read-only } ;
 
 :: <1mealy> ( state-getter stf output-quot -- 1mealy )
@@ -64,71 +118,90 @@ TUPLE: 1mealy < composed { state-getter read-only } { stf read-only } { output-q
     output-quot clone
     1mealy boa ;
 
-:: [1mealy] ( stf: ( ..a state -- ..b new-state output ) initial -- quot: ( -- out state ) )
+:: [1mealy] ( stf: ( ..a state -- ..b output new-state ) initial -- quot: ( -- out state ) )
     initial :> state!
-    [ state ] stf [ swap dup state! ] <1mealy> ;
+    [ state ] stf [ state! ] <1mealy> ;
 
 ! Take a 1mealy and a quotation which modifies the state transition function,
 ! return a new 1mealy.  Note that the resulting 1mealy shares state storage with
 ! the original one, so it can not be used as a "template" mechanism.
-: change-stf ( 1mealy quot: ( stf -- stf' ) -- 1mealy' )
+: change-stf ( 1mealy quot: ( stf: ( ..in state -- ..out new-state ) -- stf' ) -- 1mealy' )
     [ [ state-getter>> ] [ output-quot>> ] [ stf>> ] tri ] dip
     call( stf -- stf' ) swap <1mealy> ;
 
-! Add a load-enable to a 1mealy function when defining a mealy circuit.
-! This results in the resulting quotation to expect a flag on top of stack
-! whether to latch the new state or the old state.
-:: with-load-enable ( stf: ( state -- new-state output ) --
-                      stf': ( enable state -- new-state output ) )
-    [| enabled state | state stf call :> ( new-state output )
-     enabled { boolean } declare new-state state ? output ] ;
+: change-output-quot ( 1mealy quot: ( output-quot: ( ..a new-state -- ..b ) --
+                                      output-quot' ) -- 1mealy' )
+    [ [ state-getter>> ] [ stf>> ] [ output-quot>> ] tri ] dip
+    call( oset -- oset' ) <1mealy> ;
 
-! pre-set an enable input with t
-: always-enabled ( quot: ( ..a enable -- ..b ) -- quot: ( ..a -- ..b ) )
-    t swap curry ;
+! Add an a state output to a 1mealy quotation
+: with-state-output ( 1mealy: ( ..in -- ..out state ) --
+                         1mealy': ( ..in -- ..out ) )
+    dup state-getter>>
+    '[ [ _ dip ] prepose ] change-output-quot ;
+
+! Add a load-enable to a 1mealy function when defining a mealy circuit. This
+! results in the resulting quotation to expect an additional flag below the
+! inputs, i.e. what is left after calling the stf, whether to latch the new
+! state or the old state. It is implemented by bypassing the TOS element around
+! the set, making the state-setter conditional on this.
+
+! TODO See whether it would ! make more sense to expect this below the inputs instead
+: with-load-enable ( 1mealy: ( ..in -- out.. state ) --
+                      1mealy': ( ..in enable -- out.. state ) )
+    ! [| stf | [| enabled state | state stf call :> ( out new-state ) out enabled
+    !           new-state state ? ] ]
+    [ '[ swap _ dip ] ] change-stf
+    [ '[ _ [ drop ] if ] ] change-output-quot
+    ;
 
 ! Add a synchronous clear input to ta state transfer function when defining a
 ! mealy circuit
-:: with-sync-clear ( stf: ( state -- new-state output ) reset-val --
-                     stf': ( clear state -- new-state output ) )
-    [| clear? state | state stf call :> ( new-state output )
-     clear? { boolean } declare reset-val new-state ? output ]
+:: with-sync-clear ( 1mealy: ( ..in -- out.. state ) reset-val --
+                    1mealy': ( ..in enable -- out.. state ) )
+    1mealy [| stf | [| clear? state | state stf call :> ( output new-state )
+     output clear? reset-val new-state ? ] ] change-stf
     ;
 
-! drop the state from a mealy quotation
-: without-state-output ( quot -- quot )
-    [ drop ] compose ; inline
+! Add a list of declarations to the front of the stf, excluding the state-input
+! on tos
+! : with-declared-inputs ( 1mealy seq -- 1mealy )
+!     '[ [ [ _ declare ] dip ] prepose ]
+!     change-stf ;
+
+! pre-set an enable input with t, does not keep 1mealy composability!
+: always-enabled ( quot: ( ..a enable -- ..b ) -- quot: ( ..a -- ..b ) )
+    t swap curry ;
 
 ! This is the simplest primitive sequential quotation
-: [reg] ( -- quot )
-    [ ] 0 [1mealy] without-state-output ;
+! : [reg] ( -- quot )
+!     [ swap ] 0 [1mealy] ;
 
 ! Return a quotation which counts internally from 0 up to n each time it is
 ! called, and outputs the current counter value
 :: [counter] ( n -- quot: ( -- x ) )
-    [| s | s { natural } declare 1 + dup n > [ drop 0 ] when s ] 0 [1mealy] without-state-output ;
+    [| s | s { natural } declare 1 + dup n > [ drop 0 ] when s swap ] 0 [1mealy] ;
 
 ! * Accumulator definition ( example character )
-: acc-stf ( reg-declaration -- stf )
-    '[ _ declare [ + ] keep ] ;
 ! The following functions define some example accumulators.  Note that these
 ! will not be synthesizable if the output of the state-transition function is
 ! not constrained.
 
 : acc-stf ( -- stf )
-    [ [ + ] keep ] ;
+    [ [ + ] keep swap ] ;
 
-
-: [acc] ( -- quot: ( x -- y ) )
-     acc-stf 0 [1mealy] without-state-output ;
+! Define an accumulator with a certain bit width
+! :: [acc] ( width -- quot: ( x -- y ) )
+!     2 width ^ :> n
+!      acc-stf 0 [1mealy] [ [ n wrap ] compose ] change-stf ;
 
 ! With sync clear
-: [acc-c] ( reset-val -- quot: ( x enable? -- y ) )
-    [ acc-stf ] dip with-sync-clear 0 [1mealy] without-state-output ;
+: [acc-c] ( width -- quot: ( x clear? -- y ) )
+    [acc] 0 with-sync-clear ;
 
 ! With load enable
-: [acc-e] ( -- quot: ( x enable? -- y ) )
-    acc-stf with-load-enable 0 [1mealy] without-state-output ;
+: [acc-e] ( width -- quot: ( x enable? -- y ) )
+    [acc] with-load-enable ;
 
 ! * DSP Structures
 ! This combinator takes a sequence of n quotations, and returns a quotation that
@@ -149,3 +222,10 @@ TUPLE: 1mealy < composed { state-getter read-only } { stf read-only } { output-q
 ! constant coefficients, summing all outputs by simply applying successive adders.
 : [fir] ( coeffs -- quot )
     [ '[ _ * ] ] map [map-reg-chain] [sum-outputs] ;
+
+! Synthesize the feedback part of a DF1 filter structure
+
+! This is based on a single block which can be composed into a parallel feedback
+! structure
+: [ar1] ( a -- quot: ( x -- x' y ) )
+    '[ + _ * dup ] 0 [1mealy] ;

@@ -1,4 +1,4 @@
-USING: math.intervals.predicates kernel math math.intervals ;
+USING: kernel math math.functions math.intervals math.intervals.predicates ;
 IN: fhdl.types
 
 ! * Synthesizable Data Types
@@ -11,6 +11,7 @@ INTERVAL-PREDICATE: int8 < fixnum 128 [ neg ] [ 1 - ] bi [a,b] ;
 INTERVAL-PREDICATE: uint8 < fixnum 0 255 [a,b] ;
 ! PREDICATE: uint8 < fixnum [ 0 >= ] [ 256 < ] bi and ;
 ! \ uint8 0 255 [a,b] "declared-interval" set-word-prop
+INTERVAL-PREDICATE: uint32 < fixnum 0 2 32 ^ 1 - [a,b] ;
 
 ! PREDICATE: natural < integer 0 >= ;
 ! \ natural 0 [a,inf] "declared-interval" set-word-prop
