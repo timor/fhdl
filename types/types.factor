@@ -17,6 +17,15 @@ INTERVAL-PREDICATE: uint32 < fixnum 0 2 32 ^ 1 - [a,b] ;
 ! \ natural 0 [a,inf] "declared-interval" set-word-prop
 INTERVAL-PREDICATE: natural < integer 0 [a,inf] ;
 
+! A single bit, will be synthesized as single-bit integer signal.
+INTERVAL-PREDICATE: bit < fixnum 0 1 [a,b] ;
+
+! Turns a boolean into a 1 bit unsigned integer.
+: >bit ( ? -- b )
+    {
+        { t [ 1 ] }
+        { f [ 0 ] }
+    } case ;
 
 ! Declaring a value to be in a certain interval relies on a modification to the
 ! compiler for now, which also allows to declare intervals in addition to types
