@@ -53,6 +53,9 @@ M: boolean literal>verilog "1" "0" ? ;
 : binary-expression ( v1 v2 op -- str )
     swap "(%s %s %s)" sprintf ;
 
+: unary-expression ( v op -- str )
+    swap "(%s %s)" sprintf ;
+
 : wrap-begin-block ( str -- str )
     "begin\n" "\nend" surround ;
 
