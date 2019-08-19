@@ -63,7 +63,7 @@ IN: fhdl.combinators.tests
 ] unit-test
 
 ! DSP stuff
-
+! FIXME: this test fails currently, generating a surplus +1 in the second-to-last element
 { { 0 42 66 0 0 0 0 0 } } [
     { 0 42 66 0 5 0 0 } [fir]
     { 1 0 0 0 0 0 0 0 } map>outputs concat
