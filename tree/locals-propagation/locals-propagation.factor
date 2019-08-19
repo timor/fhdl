@@ -140,7 +140,7 @@ M: local-reader-node node-local-box
     dup
     [
         dup local-reader-node?
-        [ node-local-box [ first clone <literal-info> ] keep local-infos get push-at ]
+        [ node-local-box [ first clone <literal-info> f >>literal? ] keep local-infos get push-at ]
         [ drop ] if
     ] each-node ;
 
