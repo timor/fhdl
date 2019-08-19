@@ -17,7 +17,10 @@ IN: fhdl.simulation
 
 ! Map quotation over sequence, collecting all outputs into a result sequence.
 : map>outputs ( quot seq -- seq )
-    over '[ _ output>array ] map ; inline
+    swap '[ _ output>array ] map ; inline
+
+: 2map>outputs ( quot s1 s2 -- seq )
+    rot '[ _ output>array ] 2map ; inline
 
 ! Call quot n times, collect all outputs into a result sequence.
 :: run-cycles ( quot n -- seq )
