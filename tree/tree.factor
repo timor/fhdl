@@ -15,7 +15,6 @@ IN: fhdl.tree
 
 FROM: compiler.tree => node node? ;
 FROM: namespaces => set ;
-FROM: fhdl.combinators.private => (reg) ;
 
 ! * Directed Graph construction
 

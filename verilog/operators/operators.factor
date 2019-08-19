@@ -1,6 +1,6 @@
-USING: accessors assocs combinators.short-circuit compiler.tree fhdl.module
-fhdl.types fhdl.verilog fhdl.verilog.syntax generic io kernel math
-math.intervals math.partial-dispatch math.private sequences words ;
+USING: accessors assocs combinators.short-circuit compiler.tree fhdl.functions
+fhdl.module fhdl.types fhdl.verilog fhdl.verilog.syntax generic io kernel math
+math.partial-dispatch math.private sequences words ;
 
 IN: fhdl.verilog.operators
 
@@ -63,16 +63,6 @@ M: unary-op-node node>verilog
     [ in-d>> first get-var name>> ]
     [ word>> verilog-unary-op ] tri
     unary-expression assign-net print ;
-
-! Concatenation operator.  Top of stack contains the new lsb, the
-! element below is the msb part
-! that is the new lsb. e.g. ... n b --> 2*n+b
-
-: lsb-concat ( b n -- n' )
-    1 shift + ;
-\ lsb-concat [
-    nip clone [ 1 [a,a] interval-shift ] change-interval
-] "outputs" set-word-prop
 
 PREDICATE: concat-op-node < #call word>> \ lsb-concat = ;
 M: concat-op-node node>verilog

@@ -1,5 +1,6 @@
 USING: fhdl fhdl.combinators fhdl.module fhdl.tree fhdl.types fhdl.verilog
-kernel kernel.private locals math math.bitwise sequences typed ;
+kernel kernel.private locals math math.bitwise math.functions math.intervals
+math.intervals.predicates sequences typed ;
 
 IN: fhdl.examples
 
@@ -43,6 +44,9 @@ TYPED: fir8 ( x: uint8 -- y )
 : ex-incorrect-FDRE ( -- )
     [reg] { uint8 } with-declared-inputs with-load-enable 0 with-sync-clear verilog. ;
 
+: ex-iir ( -- )
+    { 1 3 } { -5 0 7 } 16 [iir] { uint8 } with-declared-inputs verilog. ;
+
 ! Quick way to run all examples and verify that everything still works
 : run-examples ( -- )
     ex-fir-tree
@@ -52,6 +56,7 @@ TYPED: fir8 ( x: uint8 -- y )
     ex-fir-verilog
     ex-correct-FDRE
     ex-incorrect-FDRE
+    ex-iir
     ;
 
 
@@ -82,3 +87,20 @@ TYPED: fir8 ( x: uint8 -- y )
     [let 0 :> state! [| in enable | state enable [ state in +
                                                  ] [ state ] if 2048 wrap state! ] ]
     [ { uint8 boolean } declare ] prepend ;
+
+! * Tuples
+: ubits-interval ( b -- int )
+    2 swap ^ 0 swap 1 - [a,b] ;
+
+INTERVAL-PREDICATE: uint7 < integer 7 ubits-interval ;
+TUPLE: cache-line
+    { tag uint7 initial: 0 }
+    { valid? boolean initial: f }
+    { data uint32 initial: 0 }
+    ;
+
+TYPED: cache-line-valid? ( l: cache-line --  ? )
+    valid?>> ;
+
+
+! * Enums
