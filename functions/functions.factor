@@ -1,4 +1,5 @@
-USING: combinators fhdl.types kernel kernel.private math math.bitwise ;
+USING: accessors fhdl.types kernel kernel.private math math.bitwise
+math.intervals words ;
 
 IN: fhdl.functions
 
