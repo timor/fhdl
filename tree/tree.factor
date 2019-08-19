@@ -6,23 +6,15 @@ compiler.tree.def-use compiler.tree.escape-analysis
 compiler.tree.escape-analysis.check compiler.tree.identities
 compiler.tree.modular-arithmetic compiler.tree.normalization
 compiler.tree.optimizer compiler.tree.propagation compiler.tree.propagation.info
-compiler.tree.recursive compiler.tree.tuple-unboxing formatting graphviz
-graphviz.notation graphviz.render images.viewer io.files.temp kernel locals math
-math.intervals math.parser namespaces present prettyprint sequences strings ui
-ui.gadgets.scrollers words ;
+compiler.tree.recursive compiler.tree.tuple-unboxing
+fhdl.tree.locals-propagation formatting graphviz graphviz.notation
+graphviz.render images.viewer io.files.temp kernel locals math math.intervals
+math.parser namespaces present sequences strings ui
+ui.gadgets.scrollers ;
 IN: fhdl.tree
 
 FROM: compiler.tree => node node? ;
 FROM: namespaces => set ;
-FROM: fhdl.combinators.private => (reg) ;
-
-! * Special treatment of reg-pseudocall
-
-PREDICATE: reg-node < #call
-    word>> \ (reg) = ;
-
-! HACK the value info to copy the input info, this ensures correct value type propagation
-\ (reg) [ drop clone ] "outputs" set-word-prop
 
 ! * Directed Graph construction
 
@@ -66,7 +58,7 @@ M: #call node-name
     word>> name>> ;
 
 M: #push node-name
-    literal>> "%u" sprintf "'" dup surround ;
+    literal>> dup identity-hashcode "'%u'(%x)" sprintf ;
 
 <PRIVATE
 : intervall-length>str ( x -- x )
@@ -78,7 +70,7 @@ M: #push node-name
 
 : value-label ( value prefix -- str )
     swap
-    value-info dup . interval>> interval-length intervall-length>str "(" ")" surround
+    value-info interval>> interval-length intervall-length>str "(" ")" surround
     append ;
 
 : escape-node-name ( str -- str )
@@ -127,7 +119,9 @@ M: node add-input-edges
 
 ! TODO better name
 : fhdl-optimize ( nodes  -- nodes )
-    analyze-recursive normalize propagate cleanup-tree dup
+    analyze-recursive normalize propagate
+    optimize-locals
+    cleanup-tree dup
     run-escape-analysis?
     [ escape-analysis unbox-tuples ] when
     apply-identities compute-def-use remove-dead-code ?check
@@ -153,6 +147,8 @@ M: node add-input-edges
     ;
 
 
+! Note: this currently relies on def-use and value-infos compiler information
+! FIXME: don't call this tree.
 : tree. ( word/quot -- )
     [
         build-fhdl-tree

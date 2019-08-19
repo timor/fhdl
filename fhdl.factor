@@ -1,11 +1,9 @@
 ! Copyright (C) 2019 martinb.
 ! See http://factorcode.org/license.txt for BSD license.
-USING: fhdl.combinators fhdl.verilog.operators fhdl kernel macros math typed ;
+USING: arrays fhdl.combinators fhdl.verilog fhdl.verilog.operators kernel
+kernel.private macros math math.intervals sequences typed words ;
 IN: fhdl
 
-! * Synthesizable Data Types
-! Data Types which are supposed to be synthesizable
-PREDICATE: uint8 < fixnum [ 0 >= ] [ 256 < ] bi and ;
 
 
 ! * Synthesizable Quotations
@@ -65,8 +63,4 @@ MACRO: fir ( coeffs -- quot )
 MACRO: counter ( n -- quot )
     [counter] ;
 
-! * Generating Verilog Code
-
-! Print a verilog implementation of the word or quotation to standard output.
-: verilog. ( quot/word -- )
-    code>verilog ;
+! * TODO remove headline Generating Verilog Code
