@@ -38,7 +38,7 @@ IN: fhdl.combinators
 ! In the simplest case, calling [ ... ] [ ] <1mealy> will simply copy the inputs
 ! below the state output
 
-! ** Compositional Combinators
+! * Compositional Combinators
 
 ! Since a module/block/synthesizable-unit-of-code is represented by a quotation,
 ! functionality can be added by using function composition.  In concatenative
@@ -48,7 +48,7 @@ IN: fhdl.combinators
 ! sequence operations, but Factor provides the words `prepose` and `compose` for
 ! the respective operations on quotations.
 
-! *** Input transformation
+! ** Input transformation
 
 ! Add another input (will become the first input, e.g. top of stack element)
 ! which conditionally loads the new-state (tos-1) or the input value (tos-2) in
@@ -65,7 +65,7 @@ IN: fhdl.combinators
     ;
 
 
-! *** Chaining composition
+! ** Chaining composition
 
 ! This combinator bypasses the inputs to quotation as additional outputs on top
 ! of the stack
@@ -77,7 +77,7 @@ IN: fhdl.combinators
 :: compose-times ( quot n quot-generator -- quot )
     quot n [ quot-generator call( ... -- ... quot ) compose ] times ;
 
-! *** Type declarations
+! ** Type declarations
 
 ! Although in practice typed definitions should be used to set the input types
 ! of a module-describing quotation, the following combinator is useful during
@@ -86,7 +86,7 @@ IN: fhdl.combinators
 : with-declared-inputs ( quot decl -- quot' )
     '[ _ declare ] prepose ;
 
-! *** Output transformation
+! ** Output transformation
 ! Another combinator can be used to connect single bits resulting from a
 ! quotation into a resulting integer variable
 
